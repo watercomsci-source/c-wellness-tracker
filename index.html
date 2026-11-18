@@ -1,0 +1,3331 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>C Wellness Care Tracker | ระบบรายงานอาการคนไข้ผ่าน LINE</title>
+
+  <!-- Google Fonts: Prompt -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Prompt', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- LINE LIFF SDK v2 -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+  <style>
+    body {
+      font-family: 'Prompt', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-24">
+
+  <!-- ===================================================================== -->
+  <!-- ส่วนหัวของแอป (Header Bar)                                             -->
+  <!-- ===================================================================== -->
+  <header class="bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-md sticky top-0 z-30">
+    <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2.5">
+        <div class="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-inner">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-sm font-semibold leading-tight">C Wellness Care Tracker</h1>
+          <p id="headerSubtitle" class="text-[11px] text-emerald-100">กำลังตรวจสอบสิทธิ์ผู้ใช้งาน...</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <span id="roleBadgeHeader" class="hidden text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-white/20 text-white border border-white/30"></span>
+        <button id="btnLogoutHeader" type="button" onclick="handleLogoutSession()" class="hidden text-[10px] px-2 py-0.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition" title="เปลี่ยนบัญชี / ออกจากระบบ">
+          ออก
+        </button>
+        <img id="headerAvatar" src="https://ui-avatars.com/api/?name=CW&background=0D9488&color=fff" alt="Avatar" class="w-8 h-8 rounded-full border-2 border-white/80 object-cover shadow-sm" />
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================================================================== -->
+  <!-- ส่วนเนื้อหาหลัก (Main Container)                                      -->
+  <!-- ===================================================================== -->
+  <main class="max-w-md mx-auto px-4 pt-4 space-y-4">
+
+    <!-- กล่องแจ้งเตือนสถานะ (Alert Toast) -->
+    <div id="globalAlert" class="hidden rounded-2xl p-3.5 text-xs font-medium shadow-sm transition-all"></div>
+
+    <!-- =================================================================== -->
+    <!-- STATE 0: หน้า Loading ขณะเชื่อมต่อ LINE LIFF & ตรวจสอบสิทธิ์        -->
+    <!-- =================================================================== -->
+    <section id="viewLoading" class="bg-white rounded-2xl p-8 shadow-sm border border-slate-100 text-center space-y-3 my-6">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-50 text-emerald-600">
+        <svg class="animate-spin h-7 w-7" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+      <h2 class="text-sm font-semibold text-slate-700">กำลังโหลดข้อมูลและตรวจสอบสิทธิ์...</h2>
+      <p class="text-xs text-slate-400">กรุณารอสักครู่ ระบบกำลังเชื่อมต่อฐานข้อมูล</p>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- STATE 1: หน้าเข้าสู่ระบบ / ลงทะเบียนครั้งแรก                          -->
+    <!-- =================================================================== -->
+    <section id="viewRegister" class="hidden space-y-4">
+
+      <!-- ส่วนที่ 1: สำหรับผู้ที่เคยลงทะเบียนแล้ว (เข้าสู่ระบบด้วยเบอร์โทรศัพท์) -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold text-base">
+            🔑
+          </div>
+          <div>
+            <h2 class="text-sm font-semibold text-slate-800">เข้าสู่ระบบ (สำหรับผู้ที่ลงทะเบียนแล้ว)</h2>
+            <p class="text-[11px] text-slate-400">กรอกเบอร์โทรศัพท์ที่ลงทะเบียนไว้เพื่อเข้าใช้งาน</p>
+          </div>
+        </div>
+
+        <form onsubmit="handlePhoneLogin(event)" class="flex gap-2">
+          <input
+            type="text"
+            id="loginPhoneInput"
+            required
+            placeholder="เบอร์โทรศัพท์ เช่น 0812345678"
+            class="flex-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none"
+          />
+          <button
+            type="submit"
+            id="btnPhoneLogin"
+            class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs whitespace-nowrap transition"
+          >
+            เข้าสู่ระบบ
+          </button>
+        </form>
+      </div>
+
+      <!-- ส่วนที่ 2: ฟอร์มลงทะเบียนเข้าใช้งานครั้งแรก -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
+        <div class="flex items-center space-x-3 border-b border-slate-100 pb-3.5">
+          <div class="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-lg">
+            👋
+          </div>
+          <div>
+            <h2 class="text-base font-semibold text-slate-800">ลงทะเบียนเข้าใช้งานครั้งแรก</h2>
+            <p class="text-xs text-slate-400">สำหรับผู้ใช้งานใหม่ (หากสมัคร ADMIN คนแรก ระบบจะอนุมัติทันที)</p>
+          </div>
+        </div>
+
+        <form id="registerForm" onsubmit="handleRegisterSubmit(event)" class="space-y-4">
+          <div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-xs space-y-1">
+            <div class="flex justify-between">
+              <span class="text-slate-400">สถานะการเชื่อมต่อ:</span>
+              <span id="regLineDisplayName" class="font-semibold text-slate-700">-</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">รหัสอ้างอิงผู้ใช้:</span>
+              <span id="regLineUserId" class="font-mono text-[11px] text-slate-500 truncate max-w-[180px]">-</span>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1">
+              ชื่อ-นามสกุลจริง <span class="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              id="regFullName"
+              required
+              placeholder="เช่น คุณสมหญิง รักดี"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1">
+              เบอร์โทรศัพท์ติดต่อ <span class="text-rose-500">*</span>
+            </label>
+            <input
+              type="tel"
+              id="regPhone"
+              required
+              placeholder="เช่น 0812345678"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1">
+              บทบาทที่ขอลงทะเบียน <span class="text-rose-500">*</span>
+            </label>
+            <select
+              id="regRole"
+              required
+              class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none"
+            >
+              <option value="RELATIVE">👨‍👩‍👧 ญาติคนไข้ (Relative) - ดูอาการและรับแจ้งเตือน</option>
+              <option value="CAREGIVER">👩‍⚕️ พนักงานเฝ้าไข้ (Caregiver) - บันทึกอาการประจำวัน</option>
+              <option value="ADMIN">👑 ผู้ดูแลระบบ (Admin) - จัดการสิทธิ์และภาพรวม</option>
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            id="btnRegisterSubmit"
+            class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-md shadow-emerald-600/20 transition disabled:opacity-60"
+          >
+            ส่งคำขอลงทะเบียน
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- STATE 2: หน้ารออนุมัติสิทธิ์ (PENDING หรือ INACTIVE)                  -->
+    <!-- =================================================================== -->
+    <section id="viewPending" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 text-center space-y-4">
+        <div id="pendingIconBox" class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-50 text-amber-500 text-2xl">
+          ⏳
+        </div>
+        <div class="space-y-1">
+          <h2 id="pendingTitle" class="text-base font-semibold text-slate-800">อยู่ระหว่างรอผู้ดูแลระบบอนุมัติ</h2>
+          <p id="pendingDesc" class="text-xs text-slate-500 leading-relaxed">
+            ระบบได้รับข้อมูลลงทะเบียนของคุณแล้ว เมื่อ Admin อนุมัติสถานะเป็น ACTIVE คุณจะได้รับแจ้งเตือนทาง LINE ทันที
+          </p>
+        </div>
+
+        <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-100 text-left text-xs space-y-2">
+          <div class="flex justify-between">
+            <span class="text-slate-400">ชื่อ-นามสกุล:</span>
+            <span id="pendingFullName" class="font-semibold text-slate-700">-</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">บทบาทที่ขอ:</span>
+            <span id="pendingRole" class="font-semibold text-emerald-700">-</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">สถานะปัจจุบัน:</span>
+            <span id="pendingStatusBadge" class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold text-[11px]">PENDING</span>
+          </div>
+          <div class="pt-1 border-t border-slate-200/70 flex items-center justify-between">
+            <span class="text-slate-400">LINE ID:</span>
+            <button type="button" onclick="copyLineUserId()" class="text-[11px] text-emerald-600 font-medium hover:underline">
+              📋 คัดลอก LINE User ID
+            </button>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onclick="refreshUserContext()"
+          class="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-medium text-xs transition"
+        >
+          🔄 ตรวจสอบสถานะล่าสุด
+        </button>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- STATE 3: หน้าพนักงานเฝ้าไข้ (CAREGIVER VIEW)                         -->
+    <!-- =================================================================== -->
+    <section id="viewCaregiver" class="hidden space-y-4">
+      <!-- ปุ่มสลับหน้าย่อยของ Caregiver -->
+      <div class="grid grid-cols-2 bg-slate-200/80 p-1 rounded-xl">
+        <button
+          type="button"
+          id="cgTabBtnForm"
+          onclick="switchCaregiverTab('form')"
+          class="py-2 text-xs font-semibold rounded-lg bg-white text-emerald-700 shadow-sm transition"
+        >
+          📝 บันทึกอาการคนไข้
+        </button>
+        <button
+          type="button"
+          id="cgTabBtnHistory"
+          onclick="switchCaregiverTab('history')"
+          class="py-2 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-800 transition"
+        >
+          🕒 ประวัติรายงานย้อนหลัง
+        </button>
+      </div>
+
+      <!-- แท็บย่อย 3.1: ฟอร์มบันทึกอาการคนไข้ -->
+      <div id="cgSectionForm" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
+        <div class="border-b border-slate-100 pb-3 flex items-center justify-between gap-2">
+          <div>
+            <h2 id="cgFormHeadingTitle" class="text-base font-semibold text-slate-800">บันทึกรายงานอาการประจำวัน</h2>
+            <p id="cgFormHeadingSub" class="text-xs text-slate-400">ระบบจะส่ง LINE แจ้งเตือนญาติคนไข้อัตโนมัติหลังกดส่ง</p>
+          </div>
+          <button
+            type="button"
+            onclick="handleBackFromSymptomForm()"
+            class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs whitespace-nowrap transition flex items-center space-x-1"
+          >
+            <span>←</span>
+            <span>ย้อนกลับ</span>
+          </button>
+        </div>
+
+        <!-- แถบแจ้งสถานะเมื่ออยู่ในโหมดแก้ไขรายงานเดิม -->
+        <div id="editReportBanner" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between text-xs text-amber-800">
+          <div>
+            <span class="font-bold">✏️ โหมดแก้ไขรายงาน:</span>
+            <span id="editReportBannerId" class="font-mono ml-1"></span>
+            <p class="text-[11px] text-amber-700 mt-0.5">วัน-เวลาที่บันทึกครั้งแรกจะคงเดิม ระบบจะบันทึกเวลาแก้ไขแยกไว้สำหรับ Admin</p>
+          </div>
+        </div>
+
+        <form id="symptomReportForm" onsubmit="handleSymptomSubmit(event)" class="space-y-4">
+          <input type="hidden" id="editReportId" value="" />
+          <!-- เลือกคนไข้ -->
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1">
+              เลือกคนไข้ที่ดูแล
+            </label>
+            <select
+              id="repPatientSelect"
+              onchange="handlePatientSelectChange(this.value)"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none"
+            >
+              <option value="" selected>-- เลือกรายชื่อคนไข้ --</option>
+            </select>
+          </div>
+
+          <!-- การ์ดแสดงข้อมูลสำคัญของคนไข้ที่เลือก (โรคประจำตัว / แพ้ยา / ห้องพัก) -->
+          <div id="selectedPatientInfoCard" class="hidden bg-sky-50/80 border border-sky-100 rounded-xl p-3 text-xs space-y-1">
+            <div class="flex justify-between items-center">
+              <span id="selPatientName" class="font-semibold text-sky-900"></span>
+              <span id="selPatientLocation" class="text-[11px] bg-white px-2 py-0.5 rounded-md text-sky-700 border border-sky-200"></span>
+            </div>
+            <p class="text-slate-600">🩺 โรคประจำตัว: <span id="selPatientDisease" class="font-medium text-slate-800"></span></p>
+            <p class="text-rose-600">💊 ประวัติแพ้ยา: <span id="selPatientAllergy" class="font-semibold"></span></p>
+          </div>
+
+          <!-- ระดับการประเมินอาการ -->
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1.5">
+              ระดับการประเมินอาการ
+            </label>
+            <input type="hidden" id="repTriageLevel" value="ปกติ" />
+            <div class="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                id="triageBtnNormal"
+                onclick="selectTriage('ปกติ')"
+                class="py-2.5 px-2 rounded-xl border-2 border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold text-xs flex flex-col items-center space-y-0.5 transition"
+              >
+                <span class="text-base">🟢</span>
+                <span>ปกติ</span>
+              </button>
+              <button
+                type="button"
+                id="triageBtnWatch"
+                onclick="selectTriage('เฝ้าระวัง')"
+                class="py-2.5 px-2 rounded-xl border border-slate-200 bg-white text-slate-600 font-medium text-xs flex flex-col items-center space-y-0.5 transition"
+              >
+                <span class="text-base">⚠️</span>
+                <span>เฝ้าระวัง</span>
+              </button>
+              <button
+                type="button"
+                id="triageBtnEmergency"
+                onclick="selectTriage('ฉุกเฉิน')"
+                class="py-2.5 px-2 rounded-xl border border-slate-200 bg-white text-slate-600 font-medium text-xs flex flex-col items-center space-y-0.5 transition"
+              >
+                <span class="text-base">🚨</span>
+                <span>ฉุกเฉิน</span>
+              </button>
+            </div>
+            <p id="emergencyWarningNote" class="hidden mt-1.5 text-[11px] text-rose-600 font-medium bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-200">
+              🚨 เมื่อเลือก "ฉุกเฉิน" ระบบจะส่งแจ้งเตือนด่วนไปยังญาติคนไข้และผู้ดูแลระบบทุกคนทันที!
+            </p>
+          </div>
+
+          <!-- 1. ช่วงเวลารายงานอาการ (เลือกได้เพียงช่องเดียว: เช้า (Day) / เย็น (Night)) -->
+          <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-200/80 space-y-2">
+            <label class="block text-xs font-semibold text-slate-700">
+              1. ช่วงเวลารายงานอาการ
+            </label>
+            <div class="grid grid-cols-2 gap-2.5 text-xs">
+              <label id="lblPeriodDay" class="flex items-center space-x-2.5 bg-white p-2.5 rounded-xl border border-slate-200 cursor-pointer transition hover:border-emerald-400">
+                <input
+                  type="checkbox"
+                  name="repPeriodCheck"
+                  value="เช้า (Day)"
+                  onchange="handleSingleCheckboxGroup('repPeriodCheck', this)"
+                  class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <span class="font-medium text-slate-700">☀️ เช้า (Day)</span>
+              </label>
+              <label id="lblPeriodNight" class="flex items-center space-x-2.5 bg-white p-2.5 rounded-xl border border-slate-200 cursor-pointer transition hover:border-emerald-400">
+                <input
+                  type="checkbox"
+                  name="repPeriodCheck"
+                  value="เย็น (Night)"
+                  onchange="handleSingleCheckboxGroup('repPeriodCheck', this)"
+                  class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <span class="font-medium text-slate-700">🌙 เย็น (Night)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 2. ระดับการรู้สึกตัว -->
+          <div>
+            <label for="repConsciousness" class="block text-xs font-semibold text-slate-700 mb-1">
+              2. ระดับการรู้สึกตัว
+            </label>
+            <input
+              type="text"
+              id="repConsciousness"
+              placeholder="เช่น รู้สึกตัวดี พูดคุยรู้เรื่อง / ซึมลงเล็กน้อย"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs focus:border-emerald-500 focus:bg-white focus:outline-none"
+            />
+          </div>
+
+          <!-- 3. สัญญาณชีพ -->
+          <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-200/80 space-y-2.5">
+            <label class="block text-xs font-semibold text-slate-700">
+              3. สัญญาณชีพ
+            </label>
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <span class="text-[11px] text-slate-500 block mb-0.5">ความดันโลหิต</span>
+                <input type="text" id="vsBp" placeholder="เช่น 120/80" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none" />
+              </div>
+              <div>
+                <span class="text-[11px] text-slate-500 block mb-0.5">ชีพจร</span>
+                <input type="text" id="vsPulse" placeholder="เช่น 76 ครั้ง/นาที" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none" />
+              </div>
+              <div>
+                <span class="text-[11px] text-slate-500 block mb-0.5">อุณหภูมิ</span>
+                <input type="text" id="vsTemp" placeholder="เช่น 36.6 °C" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none" />
+              </div>
+              <div>
+                <span class="text-[11px] text-slate-500 block mb-0.5">อัตราการหายใจ</span>
+                <input type="text" id="vsResp" placeholder="เช่น 18 ครั้ง/นาที" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none" />
+              </div>
+              <div class="col-span-2">
+                <span class="text-[11px] text-slate-500 block mb-0.5">ออกซิเจนปลายนิ้ว</span>
+                <input type="text" id="vsO2" placeholder="เช่น 98 %" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. ระดับน้ำตาลปลายนิ้ว -->
+          <div>
+            <label for="repBloodSugar" class="block text-xs font-semibold text-slate-700 mb-1">
+              4. ระดับน้ำตาลปลายนิ้ว
+            </label>
+            <input
+              type="text"
+              id="repBloodSugar"
+              placeholder="เช่น 110"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs focus:border-emerald-500 focus:bg-white focus:outline-none"
+            />
+          </div>
+
+          <!-- 5. การรับประทานอาหาร -->
+          <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-200/80 space-y-2.5">
+            <label class="block text-xs font-semibold text-slate-700">
+              5. การรับประทานอาหาร
+            </label>
+            <div class="grid grid-cols-2 gap-2.5 text-xs">
+              <label class="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200 cursor-pointer transition hover:border-emerald-400">
+                <input
+                  type="checkbox"
+                  name="repNutritionCheck"
+                  value="รับประทานอาหารเอง"
+                  onchange="handleSingleCheckboxGroup('repNutritionCheck', this)"
+                  class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <span class="font-medium text-slate-700">🍲 รับประทานอาหารเอง</span>
+              </label>
+              <label class="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200 cursor-pointer transition hover:border-emerald-400">
+                <input
+                  type="checkbox"
+                  name="repNutritionCheck"
+                  value="อาหารทางสายยาง"
+                  onchange="handleSingleCheckboxGroup('repNutritionCheck', this)"
+                  class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <span class="font-medium text-slate-700">🍼 อาหารทางสายยาง</span>
+              </label>
+            </div>
+            <div>
+              <span class="text-[11px] text-slate-500 block mb-1">คำอธิบายการรับประทานอาหาร</span>
+              <input
+                type="text"
+                id="repNutritionNote"
+                placeholder="ระบุชนิดอาหาร ปริมาณที่รับประทาน หรือสูตรอาหารทางสายยาง..."
+                class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <!-- 6. การพักผ่อน -->
+          <div>
+            <label for="repRest" class="block text-xs font-semibold text-slate-700 mb-1">
+              6. การพักผ่อน
+            </label>
+            <input
+              type="text"
+              id="repRest"
+              placeholder="เช่น นอนหลับพักผ่อนได้ดีตลอดเวร / ตื่นกลางดึก 2 ครั้ง"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs focus:border-emerald-500 focus:bg-white focus:outline-none"
+            />
+          </div>
+
+          <!-- 7. การทำกิจกรรม -->
+          <div>
+            <label for="repActivity" class="block text-xs font-semibold text-slate-700 mb-1">
+              7. การทำกิจกรรม
+            </label>
+            <input
+              type="text"
+              id="repActivity"
+              placeholder="เช่น พลิกตะแคงตัวทุก 2 ชม., กายภาพบำบัด, นั่งรถเข็นเดินเล่น"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs focus:border-emerald-500 focus:bg-white focus:outline-none"
+            />
+          </div>
+
+          <!-- 8. ปริมาณน้ำ -->
+          <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-200/80 space-y-2">
+            <label class="block text-xs font-semibold text-slate-700">
+              8. ปริมาณน้ำ
+            </label>
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <span class="text-[11px] text-slate-500 block mb-0.5">ปริมาณน้ำเข้า</span>
+                <input
+                  type="text"
+                  id="repFluidIntake"
+                  placeholder="เช่น 1,200 มล."
+                  class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <span class="text-[11px] text-slate-500 block mb-0.5">ปริมาณน้ำออก</span>
+                <input
+                  type="text"
+                  id="repFluidOutput"
+                  placeholder="เช่น 1,000 มล."
+                  class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- 9. การขับถ่าย -->
+          <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-200/80 space-y-2.5">
+            <label class="block text-xs font-semibold text-slate-700">
+              9. การขับถ่าย
+            </label>
+            <div class="grid grid-cols-2 gap-2.5 text-xs">
+              <label class="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200 cursor-pointer transition hover:border-emerald-400">
+                <input
+                  type="checkbox"
+                  name="repExcretionCheck"
+                  value="ขับถ่าย"
+                  onchange="handleExcretionChange(this)"
+                  class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <span class="font-medium text-slate-700">✅ ขับถ่าย</span>
+              </label>
+              <label class="flex items-center space-x-2 bg-white p-2.5 rounded-xl border border-slate-200 cursor-pointer transition hover:border-emerald-400">
+                <input
+                  type="checkbox"
+                  name="repExcretionCheck"
+                  value="ไม่ขับถ่าย"
+                  onchange="handleExcretionChange(this)"
+                  class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <span class="font-medium text-slate-700">➖ ไม่ขับถ่าย</span>
+              </label>
+            </div>
+            <div id="repExcretionNoteWrapper" class="hidden">
+              <span class="text-[11px] text-slate-500 block mb-1">คำอธิบายการขับถ่าย</span>
+              <input
+                type="text"
+                id="repExcretionNote"
+                placeholder="ระบุจำนวนครั้ง ลักษณะอุจจาระ/ปัสสาวะ..."
+                class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <!-- รายละเอียดอาการ / บันทึกการดูแลเพิ่มเติม -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">
+              รายละเอียดอาการ / บันทึกการดูแลเพิ่มเติม
+            </label>
+            <textarea
+              id="repCareNotes"
+              rows="3"
+              placeholder="สรุปอาการโดยรวม หรือข้อสังเกตเพิ่มเติม..."
+              class="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none"
+            ></textarea>
+          </div>
+
+          <!-- อัปโหลดรูปภาพ (สูงสุด 3 ภาพ) -->
+          <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-200/80 space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="block text-xs font-semibold text-slate-700">
+                แนบรูปภาพอาการ / การดูแล (สูงสุด 3 ภาพ)
+              </label>
+              <span id="photoCountBadge" class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                0 / 3 ภาพ
+              </span>
+            </div>
+            <input
+              type="file"
+              id="repPhotoInput"
+              accept="image/*"
+              multiple
+              onchange="handlePhotoPreview(event)"
+              class="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+            />
+            <div id="photoPreviewWrapper" class="hidden space-y-2 pt-1">
+              <div id="photoPreviewGrid" class="grid grid-cols-3 gap-2"></div>
+              <div class="flex justify-end">
+                <button
+                  type="button"
+                  onclick="clearPhotoSelection()"
+                  class="text-[11px] text-rose-600 hover:underline font-medium"
+                >
+                  ✕ ลบรูปทั้งหมด
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-2 pt-1">
+            <button
+              type="submit"
+              id="btnSubmitReport"
+              class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-md shadow-emerald-600/20 transition disabled:opacity-60"
+            >
+              📤 บันทึกรายงานและแจ้งเตือน LINE
+            </button>
+            <button
+              type="button"
+              onclick="handleBackFromSymptomForm()"
+              class="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition"
+            >
+              ← ย้อนกลับ (หากไม่บันทึกรายงานอาการประจำวัน)
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- แท็บย่อย 3.2: ประวัติการรายงานอาการย้อนหลัง (สำหรับ Caregiver) -->
+      <div id="cgSectionHistory" class="hidden space-y-3">
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-semibold text-slate-700 whitespace-nowrap">กรองตามคนไข้:</span>
+            <select
+              id="cgHistoryFilterPatient"
+              onchange="renderCaregiverHistory()"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs focus:outline-none"
+            >
+              <option value="ALL">แสดงคนไข้ทั้งหมด</option>
+            </select>
+            <button
+              type="button"
+              onclick="handleBackFromHistoryView()"
+              class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs whitespace-nowrap transition"
+            >
+              ← ย้อนกลับ
+            </button>
+          </div>
+
+          <!-- ตัวกรองช่วงเวลา วันเริ่มต้น - วันสิ้นสุด -->
+          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+            <div>
+              <label class="block text-[11px] text-slate-500 mb-0.5">วันเริ่มต้น</label>
+              <input
+                type="date"
+                id="cgHistoryStartDate"
+                onchange="renderCaregiverHistory()"
+                class="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-500 mb-0.5">วันสิ้นสุด</label>
+              <input
+                type="date"
+                id="cgHistoryEndDate"
+                onchange="renderCaregiverHistory()"
+                class="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <!-- ปุ่มล้างตัวกรองวันที่ & ปุ่มส่งรายงานเป็นไฟล์ PDF -->
+          <div class="flex items-center justify-between gap-2 pt-1">
+            <button
+              type="button"
+              onclick="clearDateFilter('caregiver')"
+              class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium whitespace-nowrap transition"
+            >
+              ล้างวันที่
+            </button>
+            <button
+              type="button"
+              onclick="handleExportPdf('caregiver')"
+              class="flex-1 py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm flex items-center justify-center space-x-1.5 transition"
+            >
+              <span>📄</span>
+              <span>ส่งรายงานเป็นไฟล์ PDF</span>
+            </button>
+          </div>
+        </div>
+        <div id="cgHistoryTimeline" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- STATE 4: หน้าญาติคนไข้ (RELATIVE VIEW - Read-Only Timeline)          -->
+    <!-- =================================================================== -->
+    <section id="viewRelative" class="hidden space-y-4">
+      <!-- ส่วนเลือกคนไข้ที่ผูกสิทธิ์ไว้กับญาติ -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-800">ข้อมูลผู้ป่วยในความดูแลของคุณ</h2>
+            <p class="text-[11px] text-slate-400">แสดงเฉพาะคนไข้ที่ผูกสิทธิ์กับบัญชี LINE ของคุณ</p>
+          </div>
+          <button
+            type="button"
+            onclick="refreshUserContext()"
+            class="text-xs px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 font-medium"
+          >
+            🔄 รีเฟรช
+          </button>
+        </div>
+
+        <div id="relativePatientTabs" class="flex gap-2 overflow-x-auto no-scrollbar pb-1"></div>
+        <div id="relativePatientProfileCard" class="bg-slate-50 rounded-xl p-3.5 border border-slate-100 text-xs space-y-1.5"></div>
+
+        <!-- ตัวกรองช่วงเวลา วันเริ่มต้น - วันสิ้นสุด สำหรับญาติ -->
+        <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+          <div>
+            <label class="block text-[11px] text-slate-500 mb-0.5">วันเริ่มต้น</label>
+            <input
+              type="date"
+              id="relReportStartDate"
+              onchange="renderRelativeTimelineByFilter()"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs focus:outline-none"
+            />
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-500 mb-0.5">วันสิ้นสุด</label>
+            <input
+              type="date"
+              id="relReportEndDate"
+              onchange="renderRelativeTimelineByFilter()"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onclick="clearDateFilter('relative')"
+            class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium whitespace-nowrap transition"
+          >
+            ล้างวันที่
+          </button>
+          <button
+            type="button"
+            onclick="handleExportPdf('relative')"
+            class="flex-1 py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm flex items-center justify-center space-x-1.5 transition"
+          >
+            <span>📄</span>
+            <span>ส่งรายงานเป็นไฟล์ PDF</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ไทม์ไลน์ประวัติรายงานอาการของคนไข้ -->
+      <div class="space-y-2">
+        <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">
+          ไทม์ไลน์รายงานอาการประจำวัน
+        </h3>
+        <div id="relativeTimelineContainer" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- STATE 5: หน้าผู้ดูแลระบบ (ADMIN VIEW - จัดการครบวงจร 100%)           -->
+    <!-- =================================================================== -->
+    <section id="viewAdmin" class="hidden space-y-4">
+      <!-- เมนูย่อยสำหรับ Admin 4 แท็บ -->
+      <div class="grid grid-cols-4 gap-1 bg-slate-200/90 p-1 rounded-xl text-[11px] font-semibold">
+        <button type="button" id="admTabUsers" onclick="switchAdminTab('users')" class="py-2 rounded-lg bg-white text-emerald-700 shadow-sm transition">
+          👥 ผู้ใช้
+        </button>
+        <button type="button" id="admTabAccess" onclick="switchAdminTab('access')" class="py-2 rounded-lg text-slate-600 transition">
+          🔗 ผูกญาติ
+        </button>
+        <button type="button" id="admTabPatients" onclick="switchAdminTab('patients')" class="py-2 rounded-lg text-slate-600 transition">
+          🛏️ คนไข้
+        </button>
+        <button type="button" id="admTabReports" onclick="switchAdminTab('reports')" class="py-2 rounded-lg text-slate-600 transition">
+          📊 รายงาน
+        </button>
+      </div>
+
+      <!-- แท็บ Admin 1: อนุมัติและจัดการผู้ใช้งาน (Users) -->
+      <div id="admSectionUsers" class="space-y-3">
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-800">จัดการและอนุมัติผู้ใช้งาน (Users)</h2>
+            <p class="text-[11px] text-slate-400">เปลี่ยนสถานะ PENDING -> ACTIVE หรือกำหนดบทบาท</p>
+          </div>
+          <button type="button" onclick="refreshUserContext()" class="text-xs px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 font-medium">
+            🔄 รีเฟรช
+          </button>
+        </div>
+        <div id="adminUsersList" class="space-y-2.5"></div>
+      </div>
+
+      <!-- แท็บ Admin 2: จับคู่สิทธิ์ญาติคนไข้ (Relative_Access) & ตั้งค่า LINE Token -->
+      <div id="admSectionAccess" class="hidden space-y-4">
+        <!-- กล่องตั้งค่า CHANNEL_ACCESS_TOKEN สำหรับส่งแจ้งเตือน LINE -->
+        <form onsubmit="handleAdminSaveLineToken(event)" class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-slate-800">🔔 ตั้งค่า LINE แจ้งเตือน (Messaging API)</h2>
+            <span id="lineTokenStatusBadge" class="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
+              ยังไม่ได้ใส่ Token
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 leading-relaxed">
+            วาง <b>Channel access token (long-lived)</b> จาก LINE Developers (แท็บ Messaging API) เพื่อให้ระบบส่งข้อความแจ้งเตือนเข้าแชท LINE ได้ทันที
+          </p>
+          <div class="flex gap-2">
+            <input
+              type="password"
+              id="admLineTokenInput"
+              required
+              placeholder="วาง Channel Access Token ที่นี่..."
+              class="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-mono"
+            />
+            <button
+              type="submit"
+              class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs whitespace-nowrap"
+            >
+              💾 บันทึก Token
+            </button>
+          </div>
+        </form>
+
+        <form onsubmit="handleAdminAddAccess(event)" class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+          <h2 class="text-sm font-semibold text-slate-800">🔗 จับคู่สิทธิ์ญาติกับคนไข้ (Relative_Access)</h2>
+          <p class="text-[11px] text-slate-400">ญาติที่ผูกสิทธิ์จะสามารถดูไทม์ไลน์และรับแจ้งเตือน LINE อัตโนมัติ</p>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1">เลือกคนไข้ <span class="text-rose-500">*</span></label>
+            <select id="admAccPatientId" required class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+              <option value="" disabled selected>-- เลือกคนไข้ --</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1">เลือกผู้ใช้ (ญาติ) หรือระบุ LINE User ID <span class="text-rose-500">*</span></label>
+            <select id="admAccUserSelect" onchange="document.getElementById('admAccLineId').value = this.value" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs mb-1.5">
+              <option value="">-- เลือกจากรายชื่อที่ลงทะเบียนแล้ว --</option>
+            </select>
+            <input type="text" id="admAccLineId" required placeholder="LINE User ID (เช่น U123456...)" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-mono" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1">ความสัมพันธ์กับคนไข้ <span class="text-rose-500">*</span></label>
+            <input type="text" id="admAccRelation" required placeholder="เช่น บุตร, คู่สมรส, หลาน" value="บุตร / ญาติสายตรง" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs" />
+          </div>
+
+          <button type="submit" class="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-xs shadow-sm">
+            ➕ บันทึกการจับคู่สิทธิ์ญาติ
+          </button>
+        </form>
+
+        <div class="space-y-2">
+          <h3 class="text-xs font-semibold text-slate-500 px-1">รายการจับคู่สิทธิ์ญาติปัจจุบัน</h3>
+          <div id="adminAccessList" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <!-- แท็บ Admin 3: จัดการรายชื่อคนไข้ (Patients) -->
+      <div id="admSectionPatients" class="hidden space-y-4">
+        <form onsubmit="handleAdminSavePatient(event)" class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-slate-800">🛏️ เพิ่ม / แก้ไขข้อมูลคนไข้ (Patients)</h2>
+            <button type="button" onclick="resetAdminPatientForm()" class="text-[11px] text-slate-400 hover:text-slate-600">ล้างฟอร์ม</button>
+          </div>
+
+          <input type="hidden" id="admPatId" value="" />
+
+          <div class="grid grid-cols-3 gap-2">
+            <div class="col-span-2">
+              <label class="block text-[11px] text-slate-600 mb-1">ชื่อ-นามสกุลคนไข้ *</label>
+              <input type="text" id="admPatName" required placeholder="เช่น คุณสมชาย ใจดี" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-600 mb-1">อายุ (ปี)</label>
+              <input type="number" id="admPatAge" placeholder="75" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] text-slate-600 mb-1">โรคประจำตัว</label>
+              <input type="text" id="admPatDisease" placeholder="เช่น ความดัน, เบาหวาน" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-600 mb-1">ประวัติแพ้ยา</label>
+              <input type="text" id="admPatAllergy" placeholder="เช่น ไม่มี หรือ Penicillin" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] text-slate-600 mb-1">สถานที่ดูแล / ห้องพัก</label>
+              <input type="text" id="admPatLocation" placeholder="เช่น ห้อง 301 อาคาร A" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-600 mb-1">สถานะ (patient_status)</label>
+              <select id="admPatStatus" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                <option value="ACTIVE">ACTIVE (กำลังดูแล)</option>
+                <option value="DISCHARGED">DISCHARGED (จำหน่ายแล้ว)</option>
+              </select>
+            </div>
+          </div>
+
+          <button type="submit" id="admPatSubmitBtn" class="w-full py-2.5 rounded-xl bg-sky-600 text-white font-semibold text-xs shadow-sm">
+            💾 บันทึกข้อมูลคนไข้
+          </button>
+        </form>
+
+        <div id="adminPatientsList" class="space-y-2.5"></div>
+      </div>
+
+      <!-- แท็บ Admin 4: ดูรายงานอาการทั้งหมด 100% + ปุ่มเปิดฟอร์มบันทึกอาการ -->
+      <div id="admSectionReports" class="hidden space-y-3">
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-800">รายงานอาการคนไข้ทั้งหมด (100%)</h2>
+              <p class="text-[11px] text-slate-400">สำหรับผู้ดูแลระบบตรวจสอบย้อนหลัง</p>
+            </div>
+            <button
+              type="button"
+              onclick="openCaregiverFormForAdmin()"
+              class="text-xs px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-medium shadow-sm"
+            >
+              + บันทึกอาการ
+            </button>
+          </div>
+
+          <div>
+            <label class="block text-[11px] text-slate-500 mb-1">เลือกคนไข้</label>
+            <select
+              id="admReportFilterPatient"
+              onchange="renderAdminReports()"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs"
+            >
+              <option value="ALL">แสดงคนไข้ทั้งหมด</option>
+            </select>
+          </div>
+
+          <!-- ตัวกรองช่วงเวลา วันเริ่มต้น - วันสิ้นสุด ต่อจากชื่อคนไข้ -->
+          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+            <div>
+              <label class="block text-[11px] text-slate-500 mb-0.5">วันเริ่มต้น</label>
+              <input
+                type="date"
+                id="admReportStartDate"
+                onchange="renderAdminReports()"
+                class="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-500 mb-0.5">วันสิ้นสุด</label>
+              <input
+                type="date"
+                id="admReportEndDate"
+                onchange="renderAdminReports()"
+                class="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <!-- ปุ่มล้างตัวกรองวันที่ & ปุ่มส่งรายงานเป็นไฟล์ PDF -->
+          <div class="flex items-center justify-between gap-2 pt-1">
+            <button
+              type="button"
+              onclick="clearDateFilter('admin')"
+              class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium whitespace-nowrap transition"
+            >
+              ล้างวันที่
+            </button>
+            <button
+              type="button"
+              onclick="handleExportPdf('admin')"
+              class="flex-1 py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm flex items-center justify-center space-x-1.5 transition"
+            >
+              <span>📄</span>
+              <span>ส่งรายงานเป็นไฟล์ PDF</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="adminReportsTimeline" class="space-y-3"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- หน้าต่างแสดงตัวอย่างและดาวน์โหลดรายงาน PDF (เรียงตามรายวัน)             -->
+  <!-- ===================================================================== -->
+  <div
+    id="pdfReportModal"
+    class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm overflow-y-auto p-2 sm:p-4"
+  >
+    <div class="max-w-3xl mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-2">
+      <!-- แถบเครื่องมือด้านบนของหน้าต่าง PDF -->
+      <div class="bg-slate-800 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-10">
+        <div class="flex items-center space-x-2">
+          <span class="text-base">📄</span>
+          <div>
+            <h3 class="text-xs sm:text-sm font-semibold leading-tight">ตัวอย่างรายงานอาการคนไข้ (PDF)</h3>
+            <p id="pdfModalStatusText" class="text-[11px] text-emerald-300">กำลังสร้างไฟล์ PDF...</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <a
+            id="btnDownloadPdfFile"
+            href="#"
+            download="รายงานอาการคนไข้.pdf"
+            class="hidden px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold transition"
+          >
+            ⬇️ ดาวน์โหลด .PDF
+          </a>
+          <a
+            id="btnOpenDrivePdf"
+            href="#"
+            target="_blank"
+            rel="noopener"
+            class="hidden px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-semibold transition"
+          >
+            🔗 เปิดไฟล์ PDF
+          </a>
+          <button
+            type="button"
+            onclick="printPdfPreviewContent()"
+            class="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-medium transition"
+          >
+            🖨️ พิมพ์
+          </button>
+          <button
+            type="button"
+            onclick="closePdfReportModal()"
+            class="px-2.5 py-1.5 rounded-xl bg-rose-500/80 hover:bg-rose-600 text-white text-xs font-semibold transition"
+          >
+            ✕ ปิด
+          </button>
+        </div>
+      </div>
+
+      <!-- พื้นที่แสดงเนื้อหารายงาน PDF ที่ออกแบบเรียงตามรายวัน -->
+      <div id="pdfPreviewContainer" class="p-4 sm:p-6 bg-white text-slate-800 overflow-x-auto"></div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- กล่องข้อความแจ้งเตือน Popup Modal เมื่อกดบันทึกรายการสำเร็จ              -->
+  <!-- ===================================================================== -->
+  <div
+    id="saveSuccessModal"
+    onclick="if(event.target === this) closeSaveSuccessModal()"
+    class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+  >
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4 transform transition-all">
+      <div class="mx-auto w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-inner">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <div class="space-y-1.5">
+        <h3 id="saveModalTitle" class="text-lg font-bold text-slate-800">บันทึกเรียบร้อย</h3>
+        <p id="saveModalMessage" class="text-xs text-slate-500 leading-relaxed">
+          ระบบได้บันทึกข้อมูลของคุณลงฐานข้อมูลเรียบร้อยแล้ว
+        </p>
+      </div>
+      <button
+        type="button"
+        onclick="closeSaveSuccessModal()"
+        class="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-md shadow-emerald-600/20 transition"
+      >
+        ตกลง
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- ส่วน JavaScript หลัก (Configuration, LIFF Auth, API & UI Rendering)   -->
+  <!-- ===================================================================== -->
+  <script>
+    /**
+     * ========================================================================
+     * 1. ตั้งค่าคอนฟิกหลักของระบบ
+     * ========================================================================
+     */
+    const LIFF_ID = "2012651780-NY19Q097";
+    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbycHV_Ci8_nbiNhy4lDqHBAGIIdF7QKrM26Tf4VL6xotxMpRUrh_gUGpt6o02PHPX5tSA/exec";
+
+    // ข้อมูลโปรไฟล์จาก LINE LIFF และข้อมูล Dashboard จาก Backend
+    let lineProfile = {
+      userId: "",
+      displayName: "",
+      pictureUrl: ""
+    };
+    let appState = null;
+    let selectedPhotos = []; // เก็บรูปภาพใหม่สูงสุด 3 ภาพ [{ base64, mime }]
+    let existingPhotoUrls = []; // เก็บลิงก์รูปภาพเดิมเมื่ออยู่ในโหมดแก้ไขรายงาน
+    let selectedRelativePatientId = "";
+
+    window.addEventListener("DOMContentLoaded", function () {
+      initializeLiffAndApp();
+    });
+
+    /**
+     * ========================================================================
+     * 2. เชื่อมต่อ LINE LIFF SDK และดึงสิทธิ์ผู้ใช้งานจริงจากแท็บ Users
+     * (รองรับทั้งการเปิดในแอป LINE LIFF และการเปิดผ่าน Web Browser บนคอมพิวเตอร์/มือถือ)
+     * ========================================================================
+     */
+    async function initializeLiffAndApp() {
+      try {
+        // ตั้ง Timeout 3.5 วินาทีสำหรับ liff.init เพื่อไม่ให้หน้าเว็บค้างหากเปิดใน Google Apps Script Iframe บน PC
+        await Promise.race([
+          liff.init({ liffId: LIFF_ID }),
+          new Promise(function (_, reject) {
+            setTimeout(function () {
+              reject(new Error("LIFF_INIT_TIMEOUT"));
+            }, 3500);
+          })
+        ]);
+
+        // หากโฮสต์บน GitHub Pages / เว็บโฮสต์ปกติ (ไม่ได้ซ้อนใน Iframe ของ Google) และยังไม่ได้ล็อกอิน ให้เข้าสู่ระบบ LINE อัตโนมัติเพื่อดึง LINE User ID จริง
+        const isInsideIframe = (window.self !== window.top);
+        if (typeof liff !== "undefined" && !liff.isLoggedIn() && !isInsideIframe) {
+          liff.login({ redirectUri: window.location.href });
+          return;
+        }
+
+        // กรณีล็อกอินผ่าน LINE LIFF สำเร็จ (เช่น เปิดจากแอป LINE บนมือถือ หรือล็อกอินผ่าน GitHub Pages)
+        if (typeof liff !== "undefined" && liff.isLoggedIn()) {
+          const profile = await liff.getProfile();
+          lineProfile.userId = profile.userId;
+          lineProfile.displayName = profile.displayName;
+          lineProfile.pictureUrl = profile.pictureUrl || "";
+
+          if (lineProfile.pictureUrl) {
+            document.getElementById("headerAvatar").src = lineProfile.pictureUrl;
+          }
+
+          saveLocalSession(lineProfile.userId, lineProfile.displayName);
+          await refreshUserContext();
+          return;
+        }
+      } catch (err) {
+        console.warn("LIFF Browser Mode Fallback:", err.message);
+      }
+
+      // กรณีเปิดผ่าน Web Browser (เช่น Microsoft Edge / Chrome บนคอมพิวเตอร์) ที่ liff.login() ถูกบล็อกโดย Iframe
+      const savedSession = getLocalSession();
+      if (savedSession && savedSession.userId) {
+        lineProfile.userId = savedSession.userId;
+        lineProfile.displayName = savedSession.displayName || "ผู้ใช้งานระบบ";
+        await refreshUserContext();
+        return;
+      }
+
+      // หากยังไม่เคยมี Session บนเบราว์เซอร์นี้ ให้สร้างรหัสอ้างอิงเริ่มต้นและเปิดหน้าเข้าสู่ระบบ/ลงทะเบียนทันที (ไม่ค้างหน้า Loading)
+      lineProfile.userId = getOrCreateBrowserUserId();
+      lineProfile.displayName = "เข้าใช้งานผ่านเว็บเบราว์เซอร์";
+      routeViewByAuthState({ authState: "UNREGISTERED", user: null });
+    }
+
+    function saveLocalSession(userId, displayName) {
+      try {
+        localStorage.setItem("cwellness_session_user_id", userId);
+        localStorage.setItem("cwellness_session_name", displayName || "");
+      } catch (e) {}
+    }
+
+    function getLocalSession() {
+      try {
+        const uid = localStorage.getItem("cwellness_session_user_id");
+        const name = localStorage.getItem("cwellness_session_name");
+        return uid ? { userId: uid, displayName: name } : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function getOrCreateBrowserUserId() {
+      try {
+        let bid = localStorage.getItem("cwellness_browser_uid");
+        if (!bid) {
+          bid = "WEB-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+          localStorage.setItem("cwellness_browser_uid", bid);
+        }
+        return bid;
+      } catch (e) {
+        return "WEB-" + new Date().getTime();
+      }
+    }
+
+    function handleLogoutSession() {
+      try {
+        localStorage.removeItem("cwellness_session_user_id");
+        localStorage.removeItem("cwellness_session_name");
+      } catch (e) {}
+      lineProfile.userId = getOrCreateBrowserUserId();
+      lineProfile.displayName = "เข้าใช้งานผ่านเว็บเบราว์เซอร์";
+      document.getElementById("btnLogoutHeader").classList.add("hidden");
+      hideGlobalAlert();
+      routeViewByAuthState({ authState: "UNREGISTERED", user: null });
+    }
+
+    /**
+     * ดึงข้อมูลสิทธิ์และ Dashboard ของผู้ใช้จาก Google Apps Script
+     * รองรับทั้ง google.script.run (เร็วและไม่ติด CORS เมื่อรันบน script.google.com) และ Fetch API
+     */
+    async function refreshUserContext() {
+      showOnlyView("viewLoading");
+      document.getElementById("headerSubtitle").textContent = "กำลังตรวจสอบสิทธิ์: " + (lineProfile.displayName || lineProfile.userId);
+
+      try {
+        const result = await fetchContextFromGas(lineProfile.userId);
+
+        if (!result || result.status !== "success") {
+          showGlobalAlert((result && result.message) || "ไม่สามารถดึงข้อมูลผู้ใช้งานได้", "error");
+          routeViewByAuthState({ authState: "UNREGISTERED", user: null });
+          return;
+        }
+
+        appState = result;
+        routeViewByAuthState(result);
+      } catch (err) {
+        console.error("refreshUserContext Error:", err);
+        showGlobalAlert("เชื่อมต่อฐานข้อมูลไม่สำเร็จ: " + err.message, "error");
+        routeViewByAuthState({ authState: "UNREGISTERED", user: null });
+      }
+    }
+
+    /**
+     * ========================================================================
+     * 3. แยกหน้าจออัตโนมัติตามสิทธิ์ (UNREGISTERED / PENDING / CAREGIVER / RELATIVE / ADMIN)
+     * ========================================================================
+     */
+    function routeViewByAuthState(state) {
+      const badgeEl = document.getElementById("roleBadgeHeader");
+      const logoutBtn = document.getElementById("btnLogoutHeader");
+      const subtitleEl = document.getElementById("headerSubtitle");
+
+      // กรณีที่ 1: ยังไม่เคยลงทะเบียนในแท็บ Users
+      if (state.authState === "UNREGISTERED") {
+        badgeEl.classList.add("hidden");
+        logoutBtn.classList.add("hidden");
+        subtitleEl.textContent = "กรุณาเข้าสู่ระบบหรือลงทะเบียน";
+        document.getElementById("regLineDisplayName").textContent = lineProfile.displayName || "เว็บเบราว์เซอร์";
+        document.getElementById("regLineUserId").textContent = lineProfile.userId || "-";
+        if (lineProfile.displayName && lineProfile.displayName !== "เข้าใช้งานผ่านเว็บเบราว์เซอร์") {
+          document.getElementById("regFullName").value = lineProfile.displayName;
+        }
+        showOnlyView("viewRegister");
+        return;
+      }
+
+      logoutBtn.classList.remove("hidden");
+
+      // กรณีที่ 2: ลงทะเบียนแล้วแต่สถานะเป็น PENDING หรือ INACTIVE
+      if (state.authState !== "ACTIVE") {
+        badgeEl.textContent = state.authState;
+        badgeEl.classList.remove("hidden");
+        subtitleEl.textContent = state.user.full_name + " (" + state.user.role + ")";
+
+        document.getElementById("pendingFullName").textContent = state.user.full_name;
+        document.getElementById("pendingRole").textContent = state.user.role;
+        document.getElementById("pendingStatusBadge").textContent = state.user.status;
+
+        if (state.authState === "INACTIVE") {
+          document.getElementById("pendingIconBox").textContent = "⛔";
+          document.getElementById("pendingTitle").textContent = "บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว (INACTIVE)";
+          document.getElementById("pendingDesc").textContent = "กรุณาติดต่อผู้ดูแลระบบ (Admin) เพื่อตรวจสอบสถานะบัญชีของคุณ";
+        } else {
+          document.getElementById("pendingIconBox").textContent = "⏳";
+          document.getElementById("pendingTitle").textContent = "อยู่ระหว่างรอผู้ดูแลระบบอนุมัติ (PENDING)";
+          document.getElementById("pendingDesc").textContent = "เมื่อ Admin อนุมัติสถานะเป็น ACTIVE แล้ว คุณสามารถกดปุ่มตรวจสอบสถานะด้านล่างเพื่อเข้าใช้งานได้ทันที";
+        }
+
+        showOnlyView("viewPending");
+        return;
+      }
+
+      // กรณีที่ 3: สถานะ ACTIVE -> แสดงหน้าจอตามบทบาท
+      const role = state.user.role;
+      badgeEl.textContent = role;
+      badgeEl.classList.remove("hidden");
+      subtitleEl.textContent = state.user.full_name;
+
+      if (role === "CAREGIVER") {
+        populateCaregiverView(state);
+        showOnlyView("viewCaregiver");
+      } else if (role === "RELATIVE") {
+        populateRelativeView(state);
+        showOnlyView("viewRelative");
+      } else if (role === "ADMIN") {
+        populateCaregiverView(state);
+        populateAdminView(state);
+        showOnlyView("viewAdmin");
+      }
+    }
+
+    function showOnlyView(viewId) {
+      const views = ["viewLoading", "viewRegister", "viewPending", "viewCaregiver", "viewRelative", "viewAdmin"];
+      views.forEach(function (id) {
+        const el = document.getElementById(id);
+        if (id === viewId) {
+          el.classList.remove("hidden");
+        } else {
+          el.classList.add("hidden");
+        }
+      });
+    }
+
+    /**
+     * ========================================================================
+     * 4. การทำงานของหน้าเข้าสู่ระบบ & ลงทะเบียน (Login / Register Flow)
+     * ========================================================================
+     */
+    async function handlePhoneLogin(event) {
+      event.preventDefault();
+      hideGlobalAlert();
+
+      const query = document.getElementById("loginPhoneInput").value.trim();
+      const btn = document.getElementById("btnPhoneLogin");
+      if (!query) return;
+
+      btn.disabled = true;
+      btn.textContent = "กำลังค้นหา...";
+
+      try {
+        const result = await postToGas({
+          action: "loginByPhone",
+          query: query,
+          current_line_user_id: lineProfile.userId
+        });
+
+        if (result.status === "success" && result.userProfile) {
+          lineProfile.userId = result.userProfile.userId;
+          lineProfile.displayName = result.userProfile.displayName;
+          saveLocalSession(lineProfile.userId, lineProfile.displayName);
+          showGlobalAlert("✅ ยินดีต้อนรับ คุณ" + lineProfile.displayName, "success");
+          appState = result.data;
+          routeViewByAuthState(appState);
+        } else {
+          showGlobalAlert(result.message || "ไม่พบบัญชีผู้ใช้งานนี้", "error");
+        }
+      } catch (err) {
+        showGlobalAlert("เกิดข้อผิดพลาดในการเข้าสู่ระบบ: " + err.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "เข้าสู่ระบบ";
+      }
+    }
+
+    async function handleRegisterSubmit(event) {
+      event.preventDefault();
+      hideGlobalAlert();
+
+      const fullName = document.getElementById("regFullName").value.trim();
+      const phone = document.getElementById("regPhone").value.trim();
+      const role = document.getElementById("regRole").value;
+      const btn = document.getElementById("btnRegisterSubmit");
+
+      if (!lineProfile.userId) {
+        lineProfile.userId = getOrCreateBrowserUserId();
+      }
+
+      btn.disabled = true;
+      btn.textContent = "กำลังส่งข้อมูลลงทะเบียน...";
+
+      try {
+        const result = await postToGas({
+          action: "registerUser",
+          line_user_id: lineProfile.userId,
+          full_name: fullName,
+          phone: phone,
+          role: role
+        });
+
+        if (result.status === "success") {
+          if (result.userProfile) {
+            lineProfile.userId = result.userProfile.userId;
+            lineProfile.displayName = result.userProfile.displayName;
+          } else {
+            lineProfile.displayName = fullName;
+          }
+          saveLocalSession(lineProfile.userId, lineProfile.displayName);
+          showGlobalAlert("✅ " + result.message, "success");
+          showSaveSuccessModal("บันทึกเรียบร้อย", result.message || "บันทึกข้อมูลลงทะเบียนเรียบร้อยแล้ว");
+          appState = result.data;
+          routeViewByAuthState(appState);
+        } else {
+          showGlobalAlert(result.message || "ลงทะเบียนไม่สำเร็จ", "error");
+        }
+      } catch (err) {
+        showGlobalAlert("เกิดข้อผิดพลาดในการส่งข้อมูลลงทะเบียน", "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "ส่งคำขอลงทะเบียน";
+      }
+    }
+
+    /**
+     * ========================================================================
+     * 5. การทำงานของหน้าพนักงานเฝ้าไข้ (CAREGIVER Flow)
+     * ========================================================================
+     */
+    function populateCaregiverView(state) {
+      const selectEl = document.getElementById("repPatientSelect");
+      const filterEl = document.getElementById("cgHistoryFilterPatient");
+
+      selectEl.innerHTML = '<option value="" selected>-- เลือกรายชื่อคนไข้ --</option>';
+      filterEl.innerHTML = '<option value="ALL">แสดงคนไข้ทั้งหมด</option>';
+
+      const activePatients = (state.patients || []).filter(function (p) {
+        return p.patient_status === "ACTIVE";
+      });
+
+      activePatients.forEach(function (p) {
+        const opt = document.createElement("option");
+        opt.value = p.patient_id;
+        opt.textContent = `${p.full_name} (${p.patient_id}) - ${p.care_location || "ไม่ระบุห้อง"}`;
+        selectEl.appendChild(opt);
+
+        const fOpt = document.createElement("option");
+        fOpt.value = p.patient_id;
+        fOpt.textContent = `${p.full_name} (${p.patient_id})`;
+        filterEl.appendChild(fOpt);
+      });
+
+      document.getElementById("selectedPatientInfoCard").classList.add("hidden");
+      renderCaregiverHistory();
+    }
+
+    function switchCaregiverTab(tab) {
+      const formSec = document.getElementById("cgSectionForm");
+      const histSec = document.getElementById("cgSectionHistory");
+      const btnForm = document.getElementById("cgTabBtnForm");
+      const btnHist = document.getElementById("cgTabBtnHistory");
+
+      if (tab === "form") {
+        formSec.classList.remove("hidden");
+        histSec.classList.add("hidden");
+        btnForm.className = "py-2 text-xs font-semibold rounded-lg bg-white text-emerald-700 shadow-sm transition";
+        btnHist.className = "py-2 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-800 transition";
+      } else {
+        formSec.classList.add("hidden");
+        histSec.classList.remove("hidden");
+        btnHist.className = "py-2 text-xs font-semibold rounded-lg bg-white text-emerald-700 shadow-sm transition";
+        btnForm.className = "py-2 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-800 transition";
+        renderCaregiverHistory();
+      }
+    }
+
+    function handlePatientSelectChange(patientId) {
+      const card = document.getElementById("selectedPatientInfoCard");
+      const patients = (appState && appState.patients) || [];
+      const found = patients.find(function (p) {
+        return p.patient_id === patientId;
+      });
+
+      if (!found) {
+        card.classList.add("hidden");
+        return;
+      }
+
+      document.getElementById("selPatientName").textContent = `${found.full_name} (อายุ ${found.age || "-"} ปี)`;
+      document.getElementById("selPatientLocation").textContent = found.care_location || "-";
+      document.getElementById("selPatientDisease").textContent = found.chronic_diseases || "ไม่มี";
+      document.getElementById("selPatientAllergy").textContent = found.drug_allergies || "ไม่มี";
+      card.classList.remove("hidden");
+    }
+
+    function selectTriage(level) {
+      document.getElementById("repTriageLevel").value = level;
+
+      const btnNormal = document.getElementById("triageBtnNormal");
+      const btnWatch = document.getElementById("triageBtnWatch");
+      const btnEmergency = document.getElementById("triageBtnEmergency");
+      const warnNote = document.getElementById("emergencyWarningNote");
+
+      const defaultClass = "py-2.5 px-2 rounded-xl border border-slate-200 bg-white text-slate-600 font-medium text-xs flex flex-col items-center space-y-0.5 transition";
+
+      btnNormal.className = defaultClass;
+      btnWatch.className = defaultClass;
+      btnEmergency.className = defaultClass;
+      warnNote.classList.add("hidden");
+
+      if (level === "ปกติ") {
+        btnNormal.className = "py-2.5 px-2 rounded-xl border-2 border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold text-xs flex flex-col items-center space-y-0.5 transition";
+      } else if (level === "เฝ้าระวัง") {
+        btnWatch.className = "py-2.5 px-2 rounded-xl border-2 border-amber-500 bg-amber-50 text-amber-800 font-semibold text-xs flex flex-col items-center space-y-0.5 transition";
+      } else if (level === "ฉุกเฉิน") {
+        btnEmergency.className = "py-2.5 px-2 rounded-xl border-2 border-rose-600 bg-rose-50 text-rose-800 font-semibold text-xs flex flex-col items-center space-y-0.5 transition";
+        warnNote.classList.remove("hidden");
+      }
+    }
+
+    /**
+     * ย่อขนาดรูปภาพด้วย Canvas อัตโนมัติก่อนแปลงเป็น Base64 (รองรับการเลือกสูงสุด 3 ภาพ รวมกับรูปเดิม)
+     */
+    function handlePhotoPreview(event) {
+      const files = event.target.files ? Array.from(event.target.files) : [];
+      if (files.length === 0) return;
+
+      const totalCurrent = existingPhotoUrls.length + selectedPhotos.length;
+      const remainingSlots = 3 - totalCurrent;
+      if (remainingSlots <= 0) {
+        showGlobalAlert("สามารถแนบรูปภาพได้สูงสุด 3 ภาพเท่านั้น (หากต้องการเปลี่ยนรูป กรุณากดลบรูปเดิมก่อน)", "error");
+        event.target.value = "";
+        return;
+      }
+
+      if (files.length > remainingSlots) {
+        showGlobalAlert("เลือกเพิ่มได้อีก " + remainingSlots + " ภาพ (ระบบจะนำเข้าเฉพาะ " + remainingSlots + " ภาพแรก)", "error");
+      }
+
+      const filesToProcess = files.slice(0, remainingSlots);
+      filesToProcess.forEach(function (file) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const img = new Image();
+          img.onload = function () {
+            const maxDim = 1200;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+            if ((existingPhotoUrls.length + selectedPhotos.length) < 3) {
+              selectedPhotos.push({
+                base64: dataUrl,
+                mime: "image/jpeg"
+              });
+              renderSelectedPhotosPreview();
+            }
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+
+      event.target.value = "";
+    }
+
+    function renderSelectedPhotosPreview() {
+      const wrapper = document.getElementById("photoPreviewWrapper");
+      const grid = document.getElementById("photoPreviewGrid");
+      const badge = document.getElementById("photoCountBadge");
+
+      const totalCount = existingPhotoUrls.length + selectedPhotos.length;
+      if (badge) {
+        badge.textContent = totalCount + " / 3 ภาพ";
+      }
+
+      if (totalCount === 0) {
+        wrapper.classList.add("hidden");
+        grid.innerHTML = "";
+        return;
+      }
+
+      wrapper.classList.remove("hidden");
+      grid.innerHTML = "";
+
+      // แสดงรูปภาพเดิมที่มีอยู่แล้ว (กรณีโหมดแก้ไขรายงาน)
+      existingPhotoUrls.forEach(function (url, idx) {
+        const box = document.createElement("div");
+        box.className = "relative rounded-xl overflow-hidden border border-slate-200 bg-white aspect-square";
+        box.innerHTML = `
+          <img src="${escapeHtml(url)}" alt="Existing ${idx + 1}" class="w-full h-full object-cover" />
+          <span class="absolute bottom-1 left-1 bg-slate-900/70 text-white text-[10px] px-1.5 py-0.5 rounded-md">ภาพเดิม ${idx + 1}</span>
+          <button
+            type="button"
+            onclick="removeExistingPhotoAtIndex(${idx})"
+            class="absolute top-1 right-1 bg-rose-600/90 hover:bg-rose-700 text-white text-[10px] w-6 h-6 rounded-full flex items-center justify-center shadow"
+            title="ลบภาพนี้"
+          >
+            ✕
+          </button>
+        `;
+        grid.appendChild(box);
+      });
+
+      // แสดงรูปภาพใหม่ที่เพิ่งเลือกเพิ่ม
+      selectedPhotos.forEach(function (item, idx) {
+        const displayIdx = existingPhotoUrls.length + idx + 1;
+        const box = document.createElement("div");
+        box.className = "relative rounded-xl overflow-hidden border border-slate-200 bg-white aspect-square";
+        box.innerHTML = `
+          <img src="${item.base64}" alt="Preview ${displayIdx}" class="w-full h-full object-cover" />
+          <span class="absolute bottom-1 left-1 bg-emerald-800/80 text-white text-[10px] px-1.5 py-0.5 rounded-md">ภาพที่ ${displayIdx}</span>
+          <button
+            type="button"
+            onclick="removePhotoAtIndex(${idx})"
+            class="absolute top-1 right-1 bg-rose-600/90 hover:bg-rose-700 text-white text-[10px] w-6 h-6 rounded-full flex items-center justify-center shadow"
+            title="ลบภาพนี้"
+          >
+            ✕
+          </button>
+        `;
+        grid.appendChild(box);
+      });
+    }
+
+    function removeExistingPhotoAtIndex(idx) {
+      existingPhotoUrls.splice(idx, 1);
+      renderSelectedPhotosPreview();
+    }
+
+    function removePhotoAtIndex(idx) {
+      selectedPhotos.splice(idx, 1);
+      renderSelectedPhotosPreview();
+    }
+
+    function clearPhotoSelection() {
+      selectedPhotos = [];
+      existingPhotoUrls = [];
+      const inputEl = document.getElementById("repPhotoInput");
+      if (inputEl) inputEl.value = "";
+      renderSelectedPhotosPreview();
+    }
+
+    /**
+     * บังคับให้ Checkbox ในกลุ่มเดียวกันเลือกได้เพียงช่องเดียวเท่านั้น (Single Selection)
+     */
+    function handleSingleCheckboxGroup(groupName, clickedCheckbox) {
+      const boxes = document.querySelectorAll('input[name="' + groupName + '"]');
+      boxes.forEach(function (box) {
+        if (box !== clickedCheckbox) {
+          box.checked = false;
+        }
+      });
+    }
+
+    /**
+     * จัดการตัวเลือกหัวข้อที่ 9 การขับถ่าย:
+     * - เลือก "ขับถ่าย" -> แสดงช่องคำอธิบาย (ไม่บังคับกรอก)
+     * - เลือก "ไม่ขับถ่าย" -> ซ่อนช่องคำอธิบาย
+     */
+    function handleExcretionChange(clickedCheckbox) {
+      handleSingleCheckboxGroup("repExcretionCheck", clickedCheckbox);
+      const noteWrapper = document.getElementById("repExcretionNoteWrapper");
+      const noteInput = document.getElementById("repExcretionNote");
+
+      if (clickedCheckbox.checked && clickedCheckbox.value === "ขับถ่าย") {
+        noteWrapper.classList.remove("hidden");
+      } else {
+        noteWrapper.classList.add("hidden");
+        noteInput.value = "";
+      }
+    }
+
+    function getSingleCheckedValue(groupName) {
+      const checked = document.querySelector('input[name="' + groupName + '"]:checked');
+      return checked ? checked.value : "";
+    }
+
+    function setSingleCheckedValue(groupName, targetVal) {
+      const boxes = document.querySelectorAll('input[name="' + groupName + '"]');
+      boxes.forEach(function (box) {
+        box.checked = (box.value === targetVal);
+      });
+    }
+
+    /**
+     * เปิดฟอร์มแก้ไขรายงานอาการเดิม (Admin แก้ไขได้ทุกรายการ, Caregiver แก้ไขได้เฉพาะของตนเอง)
+     */
+    function openEditSymptomReport(reportId) {
+      hideGlobalAlert();
+      const reports = (appState && appState.reports) || [];
+      const r = reports.find(function (item) {
+        return item.report_id === reportId;
+      });
+
+      if (!r) {
+        showGlobalAlert("ไม่พบข้อมูลรายงานที่ต้องการแก้ไข", "error");
+        return;
+      }
+
+      resetSymptomFormFields();
+
+      document.getElementById("editReportId").value = r.report_id;
+      document.getElementById("editReportBannerId").textContent = r.report_id;
+      document.getElementById("editReportBanner").classList.remove("hidden");
+      document.getElementById("cgFormHeadingTitle").textContent = "แก้ไขรายงานอาการคนไข้";
+      document.getElementById("cgFormHeadingSub").textContent = "แก้ไขข้อมูลโดยคงวัน-เวลาที่บันทึกครั้งแรกไว้ตามเดิม";
+      document.getElementById("btnSubmitReport").textContent = "💾 บันทึกการแก้ไขรายงาน";
+
+      // ตั้งค่าคนไข้ที่เลือก
+      const patSelect = document.getElementById("repPatientSelect");
+      if (r.patient_id && r.patient_id !== "-") {
+        let hasOpt = Array.from(patSelect.options).some(function (o) { return o.value === r.patient_id; });
+        if (!hasOpt) {
+          const extraOpt = document.createElement("option");
+          extraOpt.value = r.patient_id;
+          extraOpt.textContent = (r.patient_name || r.patient_id) + " (" + r.patient_id + ")";
+          patSelect.appendChild(extraOpt);
+        }
+        patSelect.value = r.patient_id;
+        handlePatientSelectChange(r.patient_id);
+      }
+
+      // ตั้งค่าระดับการประเมินอาการ
+      selectTriage(r.triage_level || "ปกติ");
+
+      // 1. ช่วงเวลารายงานอาการ
+      const parsed = parseStructuredAssessment(r.symptoms_checklist || "");
+      const periodVal = (r.report_period && r.report_period !== "-") ? r.report_period : (parsed["ช่วงเวลารายงานอาการ"] || "");
+      setSingleCheckedValue("repPeriodCheck", periodVal);
+
+      // 2. ระดับการรู้สึกตัว
+      const consVal = (r.consciousness && r.consciousness !== "-") ? r.consciousness : (parsed["ระดับการรู้สึกตัว"] || "");
+      document.getElementById("repConsciousness").value = consVal === "-" ? "" : consVal;
+
+      // 3. สัญญาณชีพ
+      document.getElementById("vsBp").value = (r.bp && r.bp !== "-") ? r.bp : "";
+      document.getElementById("vsPulse").value = (r.pulse && r.pulse !== "-") ? r.pulse : "";
+      document.getElementById("vsTemp").value = (r.temperature && r.temperature !== "-") ? r.temperature : "";
+      document.getElementById("vsResp").value = (r.respiratory_rate && r.respiratory_rate !== "-") ? r.respiratory_rate : "";
+      document.getElementById("vsO2").value = (r.oxygen_sat && r.oxygen_sat !== "-") ? r.oxygen_sat : "";
+
+      // 4. ระดับน้ำตาลปลายนิ้ว
+      const sugarVal = (r.blood_sugar && r.blood_sugar !== "-") ? r.blood_sugar : (parsed["ระดับน้ำตาลปลายนิ้ว"] || "");
+      document.getElementById("repBloodSugar").value = sugarVal === "-" ? "" : sugarVal;
+
+      // 5. การรับประทานอาหาร (แยกตัวเลือกและคำอธิบายจากคอลัมน์รวม)
+      const rawNutr = (r.nutrition_combined && r.nutrition_combined !== "-") ? r.nutrition_combined : (parsed["การรับประทานอาหาร"] || "");
+      let nutrType = "";
+      let nutrNote = "";
+      if (rawNutr.indexOf("รับประทานอาหารเอง") === 0) {
+        nutrType = "รับประทานอาหารเอง";
+        nutrNote = rawNutr.replace(/^รับประทานอาหารเอง\s*[:\-]?\s*/, "").trim();
+      } else if (rawNutr.indexOf("อาหารทางสายยาง") === 0) {
+        nutrType = "อาหารทางสายยาง";
+        nutrNote = rawNutr.replace(/^อาหารทางสายยาง\s*[:\-]?\s*/, "").trim();
+      } else if (rawNutr && rawNutr !== "-") {
+        nutrNote = rawNutr;
+      }
+      setSingleCheckedValue("repNutritionCheck", nutrType);
+      document.getElementById("repNutritionNote").value = nutrNote;
+
+      // 6. การพักผ่อน & 7. การทำกิจกรรม
+      const restVal = (r.rest_info && r.rest_info !== "-") ? r.rest_info : (parsed["การพักผ่อน"] || "");
+      const actVal = (r.activity_info && r.activity_info !== "-") ? r.activity_info : (parsed["การทำกิจกรรม"] || "");
+      document.getElementById("repRest").value = restVal === "-" ? "" : restVal;
+      document.getElementById("repActivity").value = actVal === "-" ? "" : actVal;
+
+      // 8. ปริมาณน้ำ
+      document.getElementById("repFluidIntake").value = (r.fluid_intake && r.fluid_intake !== "-") ? r.fluid_intake : "";
+      document.getElementById("repFluidOutput").value = (r.fluid_output && r.fluid_output !== "-") ? r.fluid_output : "";
+
+      // 9. การขับถ่าย (แยกตัวเลือกและคำอธิบายจากคอลัมน์รวม)
+      const rawExcr = (r.excretion_combined && r.excretion_combined !== "-") ? r.excretion_combined : (parsed["การขับถ่าย"] || "");
+      let excrType = "";
+      let excrNote = "";
+      if (rawExcr.indexOf("ไม่ขับถ่าย") === 0) {
+        excrType = "ไม่ขับถ่าย";
+      } else if (rawExcr.indexOf("ขับถ่าย") === 0) {
+        excrType = "ขับถ่าย";
+        excrNote = rawExcr.replace(/^ขับถ่าย\s*[:\-]?\s*/, "").trim();
+      }
+      setSingleCheckedValue("repExcretionCheck", excrType);
+      if (excrType === "ขับถ่าย") {
+        document.getElementById("repExcretionNoteWrapper").classList.remove("hidden");
+        document.getElementById("repExcretionNote").value = excrNote;
+      } else {
+        document.getElementById("repExcretionNoteWrapper").classList.add("hidden");
+        document.getElementById("repExcretionNote").value = "";
+      }
+
+      // รายละเอียดอาการเพิ่มเติม
+      document.getElementById("repCareNotes").value = (r.care_notes && r.care_notes !== "-") ? r.care_notes : "";
+
+      // รูปภาพเดิม
+      existingPhotoUrls = Array.isArray(r.photos) ? r.photos.slice(0, 3) : [];
+      selectedPhotos = [];
+      renderSelectedPhotosPreview();
+
+      showOnlyView("viewCaregiver");
+      switchCaregiverTab("form");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    async function handleSymptomSubmit(event) {
+      event.preventDefault();
+      hideGlobalAlert();
+
+      const editReportId = document.getElementById("editReportId").value.trim();
+      const patientId = document.getElementById("repPatientSelect").value || "-";
+      const triageLevel = document.getElementById("repTriageLevel").value || "ปกติ";
+
+      // ดึงข้อมูลแยกตามแต่ละหัวข้อเพื่อส่งไปบันทึกแยกคอลัมน์ใน Google Sheets
+      const reportPeriod = getSingleCheckedValue("repPeriodCheck") || "-";
+      const consciousness = document.getElementById("repConsciousness").value.trim() || "-";
+      const bp = document.getElementById("vsBp").value.trim() || "-";
+      const pulse = document.getElementById("vsPulse").value.trim() || "-";
+      const temp = document.getElementById("vsTemp").value.trim() || "-";
+      const resp = document.getElementById("vsResp").value.trim() || "-";
+      const o2 = document.getElementById("vsO2").value.trim() || "-";
+      const bloodSugar = document.getElementById("repBloodSugar").value.trim() || "-";
+      const nutritionType = getSingleCheckedValue("repNutritionCheck") || "-";
+      const nutritionNote = document.getElementById("repNutritionNote").value.trim() || "-";
+      const restInfo = document.getElementById("repRest").value.trim() || "-";
+      const activityInfo = document.getElementById("repActivity").value.trim() || "-";
+      const fluidIntake = document.getElementById("repFluidIntake").value.trim() || "-";
+      const fluidOutput = document.getElementById("repFluidOutput").value.trim() || "-";
+      const excretionType = getSingleCheckedValue("repExcretionCheck") || "-";
+      const excretionNote = excretionType === "ขับถ่าย"
+        ? (document.getElementById("repExcretionNote").value.trim() || "-")
+        : "-";
+      const careNotes = document.getElementById("repCareNotes").value.trim() || "-";
+
+      const btn = document.getElementById("btnSubmitReport");
+      btn.disabled = true;
+      btn.textContent = editReportId
+        ? "⏳ กำลังบันทึกการแก้ไขรายงาน..."
+        : "⏳ กำลังอัปโหลดข้อมูลและส่งแจ้งเตือน LINE...";
+
+      try {
+        const result = await postToGas({
+          action: "submitSymptomReport",
+          edit_report_id: editReportId,
+          line_user_id: lineProfile.userId,
+          patient_id: patientId,
+          triage_level: triageLevel,
+          report_period: reportPeriod,
+          consciousness: consciousness,
+          bp: bp,
+          pulse: pulse,
+          temperature: temp,
+          respiratory_rate: resp,
+          oxygen_sat: o2,
+          blood_sugar: bloodSugar,
+          nutrition_type: nutritionType,
+          nutrition_note: nutritionNote,
+          rest_info: restInfo,
+          activity_info: activityInfo,
+          fluid_intake: fluidIntake,
+          fluid_output: fluidOutput,
+          excretion_type: excretionType,
+          excretion_note: excretionNote,
+          care_notes: careNotes,
+          existing_photos: existingPhotoUrls,
+          photos_base64: selectedPhotos
+        });
+
+        if (result.status === "success") {
+          let detailMsg = result.message || "บันทึกรายงานอาการประจำวันเรียบร้อยแล้ว";
+          if (!result.isEdited && result.notifyResult) {
+            const notifyInfo = result.notifyResult;
+            detailMsg =
+              `บันทึกรายงานอาการประจำวันเรียบร้อยแล้ว (แจ้งเตือนญาติ ${notifyInfo.notifiedRelativesCount || 0} ท่าน` +
+              (triageLevel === "ฉุกเฉิน" ? `, แจ้งด่วน Admin ${notifyInfo.notifiedAdminsCount || 0} ท่าน` : "") +
+              `)`;
+            if (notifyInfo.diagnosticNote) {
+              detailMsg += " — หมายเหตุ: " + notifyInfo.diagnosticNote;
+            }
+          }
+          showGlobalAlert("✅ " + detailMsg, "success");
+          showSaveSuccessModal("บันทึกเรียบร้อย", detailMsg);
+
+          const wasEditing = Boolean(editReportId);
+          resetSymptomFormFields();
+
+          appState = result.data;
+          populateCaregiverView(appState);
+          if (appState.user.role === "ADMIN") {
+            populateAdminView(appState);
+            if (wasEditing) {
+              showOnlyView("viewAdmin");
+              switchAdminTab("reports");
+            }
+          } else if (wasEditing) {
+            switchCaregiverTab("history");
+          }
+        } else {
+          showGlobalAlert(result.message || "บันทึกรายงานไม่สำเร็จ", "error");
+        }
+      } catch (err) {
+        showGlobalAlert("เกิดข้อผิดพลาดในการส่งรายงานอาการ", "error");
+      } finally {
+        btn.disabled = false;
+        if (!document.getElementById("editReportId").value) {
+          btn.textContent = "📤 บันทึกรายงานและแจ้งเตือน LINE";
+        } else {
+          btn.textContent = "💾 บันทึกการแก้ไขรายงาน";
+        }
+      }
+    }
+
+    function resetSymptomFormFields() {
+      document.getElementById("symptomReportForm").reset();
+      document.getElementById("editReportId").value = "";
+      document.getElementById("editReportBanner").classList.add("hidden");
+      document.getElementById("cgFormHeadingTitle").textContent = "บันทึกรายงานอาการประจำวัน";
+      document.getElementById("cgFormHeadingSub").textContent = "ระบบจะส่ง LINE แจ้งเตือนญาติคนไข้อัตโนมัติหลังกดส่ง";
+      document.getElementById("btnSubmitReport").textContent = "📤 บันทึกรายงานและแจ้งเตือน LINE";
+      clearPhotoSelection();
+      selectTriage("ปกติ");
+      document.getElementById("selectedPatientInfoCard").classList.add("hidden");
+      const excWrapper = document.getElementById("repExcretionNoteWrapper");
+      const excInput = document.getElementById("repExcretionNote");
+      if (excWrapper) excWrapper.classList.add("hidden");
+      if (excInput) {
+        excInput.required = false;
+        excInput.value = "";
+      }
+    }
+
+    /**
+     * ปุ่มย้อนกลับเมื่อไม่ได้บันทึกรายงานอาการประจำวัน (หรือยกเลิกการกรอกฟอร์ม)
+     */
+    function handleBackFromSymptomForm() {
+      hideGlobalAlert();
+      resetSymptomFormFields();
+
+      if (appState && appState.user && appState.user.role === "ADMIN") {
+        showOnlyView("viewAdmin");
+        switchAdminTab("reports");
+      } else {
+        switchCaregiverTab("history");
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    /**
+     * ปุ่มย้อนกลับจากหน้ารายการประวัติรายงานอาการ
+     */
+    function handleBackFromHistoryView() {
+      hideGlobalAlert();
+      if (appState && appState.user && appState.user.role === "ADMIN") {
+        showOnlyView("viewAdmin");
+        switchAdminTab("reports");
+      } else {
+        switchCaregiverTab("form");
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    /**
+     * กรองรายการรายงานอาการตามรหัสคนไข้ + วันเริ่มต้น + วันสิ้นสุด
+     */
+    function filterReportsByPatientAndDate(reports, patientId, startDateStr, endDateStr) {
+      return (reports || []).filter(function (r) {
+        if (patientId && patientId !== "ALL" && r.patient_id !== patientId) {
+          return false;
+        }
+
+        if (startDateStr || endDateStr) {
+          const repDate = new Date(r.reported_at);
+          if (isNaN(repDate.getTime())) return false;
+
+          // แปลงวันที่ของรายงานเป็น YYYY-MM-DD ตามเวลาท้องถิ่น
+          const y = repDate.getFullYear();
+          const m = String(repDate.getMonth() + 1).padStart(2, "0");
+          const d = String(repDate.getDate()).padStart(2, "0");
+          const repYmd = `${y}-${m}-${d}`;
+
+          if (startDateStr && repYmd < startDateStr) return false;
+          if (endDateStr && repYmd > endDateStr) return false;
+        }
+        return true;
+      });
+    }
+
+    function getFilterConfigByMode(mode) {
+      const allReports = (appState && appState.reports) || [];
+      let patientId = "ALL";
+      let startDate = "";
+      let endDate = "";
+
+      if (mode === "caregiver") {
+        patientId = document.getElementById("cgHistoryFilterPatient").value || "ALL";
+        startDate = document.getElementById("cgHistoryStartDate").value || "";
+        endDate = document.getElementById("cgHistoryEndDate").value || "";
+      } else if (mode === "relative") {
+        patientId = selectedRelativePatientId || "ALL";
+        startDate = document.getElementById("relReportStartDate").value || "";
+        endDate = document.getElementById("relReportEndDate").value || "";
+      } else if (mode === "admin") {
+        patientId = document.getElementById("admReportFilterPatient").value || "ALL";
+        startDate = document.getElementById("admReportStartDate").value || "";
+        endDate = document.getElementById("admReportEndDate").value || "";
+      }
+
+      const filtered = filterReportsByPatientAndDate(allReports, patientId, startDate, endDate);
+      return {
+        patientId: patientId,
+        startDate: startDate,
+        endDate: endDate,
+        reports: filtered
+      };
+    }
+
+    function clearDateFilter(mode) {
+      if (mode === "caregiver") {
+        document.getElementById("cgHistoryStartDate").value = "";
+        document.getElementById("cgHistoryEndDate").value = "";
+        renderCaregiverHistory();
+      } else if (mode === "relative") {
+        document.getElementById("relReportStartDate").value = "";
+        document.getElementById("relReportEndDate").value = "";
+        renderRelativeTimelineByFilter();
+      } else if (mode === "admin") {
+        document.getElementById("admReportStartDate").value = "";
+        document.getElementById("admReportEndDate").value = "";
+        renderAdminReports();
+      }
+    }
+
+    function renderCaregiverHistory() {
+      const cfg = getFilterConfigByMode("caregiver");
+      renderTimelineCards(cfg.reports, "cgHistoryTimeline");
+    }
+
+    /**
+     * ========================================================================
+     * 6. การทำงานของหน้าญาติคนไข้ (RELATIVE Read-Only Timeline)
+     * ========================================================================
+     */
+    function populateRelativeView(state) {
+      const patients = state.patients || [];
+      const tabsContainer = document.getElementById("relativePatientTabs");
+      const profileCard = document.getElementById("relativePatientProfileCard");
+      const timelineContainer = document.getElementById("relativeTimelineContainer");
+
+      tabsContainer.innerHTML = "";
+
+      if (patients.length === 0) {
+        profileCard.innerHTML = `
+          <div class="text-center py-4 text-slate-500">
+            <p class="font-semibold text-sm text-slate-700">ยังไม่มีรายชื่อคนไข้ที่ผูกกับบัญชีของคุณ</p>
+            <p class="text-xs mt-1">กรุณาแจ้งผู้ดูแลระบบ (Admin) ให้จับคู่สิทธิ์ญาติในแท็บ Relative_Access</p>
+          </div>
+        `;
+        timelineContainer.innerHTML = "";
+        return;
+      }
+
+      if (!selectedRelativePatientId || !patients.some(function (p) { return p.patient_id === selectedRelativePatientId; })) {
+        selectedRelativePatientId = patients[0].patient_id;
+      }
+
+      patients.forEach(function (p) {
+        const isSelected = p.patient_id === selectedRelativePatientId;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.onclick = function () {
+          selectedRelativePatientId = p.patient_id;
+          populateRelativeView(appState);
+        };
+        btn.className = isSelected
+          ? "px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold whitespace-nowrap shadow-sm"
+          : "px-3.5 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-medium whitespace-nowrap";
+        btn.textContent = `👤 ${p.full_name}`;
+        tabsContainer.appendChild(btn);
+      });
+
+      const currentPatient = patients.find(function (p) {
+        return p.patient_id === selectedRelativePatientId;
+      });
+
+      if (currentPatient) {
+        profileCard.innerHTML = `
+          <div class="flex items-center justify-between border-b border-slate-200/70 pb-2">
+            <div>
+              <h3 class="text-sm font-bold text-slate-800">${escapeHtml(currentPatient.full_name)} <span class="text-xs font-normal text-slate-500">(อายุ ${escapeHtml(currentPatient.age || "-")} ปี)</span></h3>
+              <p class="text-[11px] text-emerald-700 font-medium">ความสัมพันธ์: ${escapeHtml(currentPatient.relationship || "ญาติ")}</p>
+            </div>
+            <span class="text-[11px] px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 font-semibold">${escapeHtml(currentPatient.care_location || "-")}</span>
+          </div>
+          <div class="pt-1 space-y-1">
+            <p class="text-slate-600">🩺 โรคประจำตัว: <span class="font-medium text-slate-800">${escapeHtml(currentPatient.chronic_diseases || "-")}</span></p>
+            <p class="text-rose-600">💊 ประวัติแพ้ยา: <span class="font-semibold">${escapeHtml(currentPatient.drug_allergies || "ไม่มี")}</span></p>
+          </div>
+        `;
+      }
+
+      renderRelativeTimelineByFilter();
+    }
+
+    function renderRelativeTimelineByFilter() {
+      const cfg = getFilterConfigByMode("relative");
+      renderTimelineCards(cfg.reports, "relativeTimelineContainer");
+    }
+
+    /**
+     * ========================================================================
+     * 7. การทำงานของหน้าผู้ดูแลระบบ (ADMIN Management View)
+     * ========================================================================
+     */
+    function switchAdminTab(tab) {
+      const tabs = {
+        users: { sec: "admSectionUsers", btn: "admTabUsers" },
+        access: { sec: "admSectionAccess", btn: "admTabAccess" },
+        patients: { sec: "admSectionPatients", btn: "admTabPatients" },
+        reports: { sec: "admSectionReports", btn: "admTabReports" }
+      };
+
+      Object.keys(tabs).forEach(function (k) {
+        const sEl = document.getElementById(tabs[k].sec);
+        const bEl = document.getElementById(tabs[k].btn);
+        if (k === tab) {
+          sEl.classList.remove("hidden");
+          bEl.className = "py-2 rounded-lg bg-white text-emerald-700 shadow-sm transition";
+        } else {
+          sEl.classList.add("hidden");
+          bEl.className = "py-2 rounded-lg text-slate-600 transition";
+        }
+      });
+    }
+
+    function openCaregiverFormForAdmin() {
+      showOnlyView("viewCaregiver");
+      switchCaregiverTab("form");
+    }
+
+    function populateAdminView(state) {
+      const tokenBadge = document.getElementById("lineTokenStatusBadge");
+      if (tokenBadge) {
+        if (state.hasLineTokenConfigured) {
+          tokenBadge.textContent = "✅ ตั้งค่า Token แล้ว";
+          tokenBadge.className = "text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800";
+        } else {
+          tokenBadge.textContent = "⚠️ ยังไม่ได้ใส่ Token";
+          tokenBadge.className = "text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800";
+        }
+      }
+      renderAdminUsersList(state.users || []);
+      renderAdminAccessSection(state.patients || [], state.users || [], state.relativeAccess || []);
+      renderAdminPatientsList(state.patients || []);
+      renderAdminReportsSection(state.patients || [], state.reports || []);
+    }
+
+    async function handleAdminSaveLineToken(event) {
+      event.preventDefault();
+      const tokenVal = document.getElementById("admLineTokenInput").value.trim();
+      if (!tokenVal) return;
+
+      try {
+        const res = await postToGas({
+          action: "adminSaveLineToken",
+          admin_line_user_id: lineProfile.userId,
+          channel_access_token: tokenVal
+        });
+
+        if (res.status === "success") {
+          document.getElementById("admLineTokenInput").value = "";
+          showGlobalAlert("✅ " + res.message, "success");
+          showSaveSuccessModal("บันทึกเรียบร้อย", res.message);
+          appState = res.data;
+          populateAdminView(appState);
+        } else {
+          showGlobalAlert(res.message || "บันทึก Token ไม่สำเร็จ", "error");
+        }
+      } catch (err) {
+        showGlobalAlert("เกิดข้อผิดพลาดในการบันทึก Token", "error");
+      }
+    }
+
+    function renderAdminUsersList(users) {
+      const container = document.getElementById("adminUsersList");
+      container.innerHTML = "";
+
+      if (users.length === 0) {
+        container.innerHTML = '<div class="bg-white rounded-2xl p-6 text-center text-xs text-slate-400">ยังไม่มีผู้ใช้งานในระบบ</div>';
+        return;
+      }
+
+      // เรียง PENDING ขึ้นก่อน
+      const sorted = users.slice().sort(function (a, b) {
+        if (a.status === "PENDING" && b.status !== "PENDING") return -1;
+        if (a.status !== "PENDING" && b.status === "PENDING") return 1;
+        return 0;
+      });
+
+      sorted.forEach(function (u) {
+        const statusBadge = u.status === "ACTIVE"
+          ? "bg-emerald-100 text-emerald-800"
+          : (u.status === "PENDING" ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800");
+
+        const card = document.createElement("div");
+        card.className = "bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3";
+        card.innerHTML = `
+          <div class="flex items-start justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">${escapeHtml(u.full_name)}</h3>
+              <p class="text-xs text-slate-500">📞 ${escapeHtml(u.phone || "-")} | รหัส: ${escapeHtml(u.user_id)}</p>
+              <p class="text-[10px] font-mono text-slate-400 truncate max-w-[230px]">LINE: ${escapeHtml(u.line_user_id)}</p>
+            </div>
+            <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full ${statusBadge}">${escapeHtml(u.status)}</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 text-xs">
+            <div>
+              <span class="text-[10px] text-slate-400 block mb-0.5">บทบาท (Role)</span>
+              <select
+                id="roleSel_${escapeHtml(u.user_id)}"
+                onchange="markUserPermissionDirty('${escapeHtml(u.user_id)}')"
+                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs"
+              >
+                <option value="RELATIVE" ${u.role === "RELATIVE" ? "selected" : ""}>RELATIVE (ญาติ)</option>
+                <option value="CAREGIVER" ${u.role === "CAREGIVER" ? "selected" : ""}>CAREGIVER (เฝ้าไข้)</option>
+                <option value="ADMIN" ${u.role === "ADMIN" ? "selected" : ""}>ADMIN (ผู้ดูแล)</option>
+              </select>
+            </div>
+            <div>
+              <span class="text-[10px] text-slate-400 block mb-0.5">สถานะ (Status)</span>
+              <select
+                id="statusSel_${escapeHtml(u.user_id)}"
+                onchange="markUserPermissionDirty('${escapeHtml(u.user_id)}')"
+                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs"
+              >
+                <option value="PENDING" ${u.status === "PENDING" ? "selected" : ""}>PENDING (รออนุมัติ)</option>
+                <option value="ACTIVE" ${u.status === "ACTIVE" ? "selected" : ""}>ACTIVE (อนุมัติ)</option>
+                <option value="INACTIVE" ${u.status === "INACTIVE" ? "selected" : ""}>INACTIVE (ระงับ)</option>
+              </select>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="saveUserBtn_${escapeHtml(u.user_id)}"
+            disabled
+            data-orig-role="${escapeHtml(u.role)}"
+            data-orig-status="${escapeHtml(u.status)}"
+            onclick="handleAdminUpdateUser('${escapeHtml(u.user_id)}')"
+            class="w-full py-2 rounded-xl bg-slate-800 text-white text-xs font-semibold opacity-80 cursor-not-allowed transition"
+          >
+            💾 บันทึกสิทธิ์ผู้ใช้งาน
+          </button>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    /**
+     * ตรวจสอบการเปลี่ยนค่า บทบาท (Role) หรือ สถานะ (Status):
+     * - หากเปลี่ยนจากค่าเดิม -> ปุ่มเปลี่ยนเป็นสีเขียวและกดบันทึกได้
+     * - หากกลับมาเลือกค่าเดิมทั้งคู่ -> ปุ่มกลับเป็นสีดำทันทีและกดบันทึกไม่ได้
+     */
+    function markUserPermissionDirty(userId) {
+      const btn = document.getElementById("saveUserBtn_" + userId);
+      const roleEl = document.getElementById("roleSel_" + userId);
+      const statusEl = document.getElementById("statusSel_" + userId);
+      if (!btn || !roleEl || !statusEl) return;
+
+      const origRole = btn.getAttribute("data-orig-role") || "";
+      const origStatus = btn.getAttribute("data-orig-status") || "";
+      const isChanged = (roleEl.value !== origRole) || (statusEl.value !== origStatus);
+
+      if (isChanged) {
+        btn.disabled = false;
+        btn.className = "w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-md shadow-emerald-600/20 cursor-pointer transition";
+      } else {
+        btn.disabled = true;
+        btn.className = "w-full py-2 rounded-xl bg-slate-800 text-white text-xs font-semibold opacity-80 cursor-not-allowed transition";
+      }
+    }
+
+    async function handleAdminUpdateUser(targetUserId) {
+      const btn = document.getElementById("saveUserBtn_" + targetUserId);
+      if (!btn || btn.disabled) return;
+
+      const newRole = document.getElementById("roleSel_" + targetUserId).value;
+      const newStatus = document.getElementById("statusSel_" + targetUserId).value;
+
+      btn.disabled = true;
+      btn.textContent = "⏳ กำลังบันทึก...";
+
+      try {
+        const res = await postToGas({
+          action: "adminUpdateUser",
+          admin_line_user_id: lineProfile.userId,
+          target_user_id: targetUserId,
+          new_role: newRole,
+          new_status: newStatus
+        });
+
+        if (res.status === "success") {
+          btn.className = "w-full py-2 rounded-xl bg-slate-800 text-white text-xs font-semibold opacity-80 cursor-not-allowed transition";
+          btn.textContent = "💾 บันทึกสิทธิ์ผู้ใช้งาน";
+          btn.disabled = true;
+          showGlobalAlert("✅ อัปเดตสิทธิ์ผู้ใช้งานเรียบร้อยแล้ว", "success");
+          showSaveSuccessModal("บันทึกเรียบร้อย", "อัปเดตสิทธิ์ผู้ใช้งานเรียบร้อยแล้ว");
+          appState = res.data;
+          populateAdminView(appState);
+        } else {
+          markUserPermissionDirty(targetUserId);
+          btn.textContent = "💾 บันทึกสิทธิ์ผู้ใช้งาน";
+          showGlobalAlert(res.message || "อัปเดตไม่สำเร็จ", "error");
+        }
+      } catch (err) {
+        markUserPermissionDirty(targetUserId);
+        btn.textContent = "💾 บันทึกสิทธิ์ผู้ใช้งาน";
+        showGlobalAlert("เกิดข้อผิดพลาดในการอัปเดตผู้ใช้งาน", "error");
+      }
+    }
+
+    function renderAdminAccessSection(patients, users, accessList) {
+      const patSel = document.getElementById("admAccPatientId");
+      const usrSel = document.getElementById("admAccUserSelect");
+      const listEl = document.getElementById("adminAccessList");
+
+      patSel.innerHTML = '<option value="" disabled selected>-- เลือกคนไข้ --</option>';
+      patients.forEach(function (p) {
+        const opt = document.createElement("option");
+        opt.value = p.patient_id;
+        opt.textContent = `${p.full_name} (${p.patient_id})`;
+        patSel.appendChild(opt);
+      });
+
+      usrSel.innerHTML = '<option value="">-- เลือกจากรายชื่อผู้ใช้ที่ลงทะเบียนแล้ว --</option>';
+      users.forEach(function (u) {
+        const opt = document.createElement("option");
+        opt.value = u.line_user_id;
+        opt.textContent = `${u.full_name} (${u.role}) - ${u.line_user_id.slice(0, 10)}...`;
+        usrSel.appendChild(opt);
+      });
+
+      const patMap = {};
+      patients.forEach(function (p) { patMap[p.patient_id] = p.full_name; });
+      const usrMap = {};
+      users.forEach(function (u) { usrMap[u.line_user_id] = u.full_name; });
+
+      listEl.innerHTML = "";
+      if (accessList.length === 0) {
+        listEl.innerHTML = '<div class="bg-white rounded-2xl p-4 text-center text-xs text-slate-400">ยังไม่มีรายการจับคู่สิทธิ์ญาติ</div>';
+        return;
+      }
+
+      accessList.forEach(function (acc) {
+        const pName = patMap[acc.patient_id] || acc.patient_id;
+        const uName = usrMap[acc.line_user_id] || "ไม่ทราบชื่อ";
+
+        const item = document.createElement("div");
+        item.className = "bg-white rounded-xl p-3.5 shadow-sm border border-slate-100 flex items-center justify-between text-xs";
+        item.innerHTML = `
+          <div class="space-y-0.5">
+            <p class="font-semibold text-slate-800">🛏️ คนไข้: ${escapeHtml(pName)} <span class="text-slate-400">(${escapeHtml(acc.patient_id)})</span></p>
+            <p class="text-emerald-700 font-medium">👨‍👩‍👧 ญาติ: ${escapeHtml(uName)} (${escapeHtml(acc.relationship)})</p>
+            <p class="text-[10px] font-mono text-slate-400">${escapeHtml(acc.line_user_id)}</p>
+          </div>
+          <button
+            type="button"
+            onclick="handleAdminDeleteAccess('${escapeHtml(acc.access_id)}')"
+            class="px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 font-medium text-[11px]"
+          >
+            ลบสิทธิ์
+          </button>
+        `;
+        listEl.appendChild(item);
+      });
+    }
+
+    async function handleAdminAddAccess(event) {
+      event.preventDefault();
+      const patientId = document.getElementById("admAccPatientId").value;
+      const lineId = document.getElementById("admAccLineId").value.trim();
+      const relationship = document.getElementById("admAccRelation").value.trim();
+
+      try {
+        const res = await postToGas({
+          action: "adminAddRelativeAccess",
+          admin_line_user_id: lineProfile.userId,
+          patient_id: patientId,
+          relative_line_user_id: lineId,
+          relationship: relationship
+        });
+
+        if (res.status === "success") {
+          showGlobalAlert("✅ จับคู่สิทธิ์ญาติคนไข้เรียบร้อยแล้ว", "success");
+          showSaveSuccessModal("บันทึกเรียบร้อย", "บันทึกการจับคู่สิทธิ์ญาติคนไข้เรียบร้อยแล้ว");
+          document.getElementById("admAccLineId").value = "";
+          appState = res.data;
+          populateAdminView(appState);
+        } else {
+          showGlobalAlert(res.message || "ไม่สามารถจับคู่สิทธิ์ได้", "error");
+        }
+      } catch (err) {
+        showGlobalAlert("เกิดข้อผิดพลาดในการจับคู่สิทธิ์ญาติ", "error");
+      }
+    }
+
+    async function handleAdminDeleteAccess(accessId) {
+      try {
+        const res = await postToGas({
+          action: "adminDeleteRelativeAccess",
+          admin_line_user_id: lineProfile.userId,
+          access_id: accessId
+        });
+
+        if (res.status === "success") {
+          showGlobalAlert("ยกเลิกการจับคู่สิทธิ์เรียบร้อยแล้ว", "success");
+          showSaveSuccessModal("บันทึกเรียบร้อย", "ยกเลิกการจับคู่สิทธิ์ญาติเรียบร้อยแล้ว");
+          appState = res.data;
+          populateAdminView(appState);
+        } else {
+          showGlobalAlert(res.message || "ลบไม่สำเร็จ", "error");
+        }
+      } catch (err) {
+        showGlobalAlert("เกิดข้อผิดพลาดในการลบสิทธิ์ญาติ", "error");
+      }
+    }
+
+    function renderAdminPatientsList(patients) {
+      const container = document.getElementById("adminPatientsList");
+      container.innerHTML = "";
+
+      if (patients.length === 0) {
+        container.innerHTML = '<div class="bg-white rounded-2xl p-5 text-center text-xs text-slate-400">ยังไม่มีรายชื่อคนไข้ กรุณาเพิ่มคนไข้ด้านบน</div>';
+        return;
+      }
+
+      patients.forEach(function (p) {
+        const isAct = p.patient_status === "ACTIVE";
+        const card = document.createElement("div");
+        card.className = "bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 flex items-center justify-between text-xs";
+        card.innerHTML = `
+          <div class="space-y-0.5">
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-slate-800">${escapeHtml(p.full_name)}</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${isAct ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}">${escapeHtml(p.patient_status)}</span>
+            </div>
+            <p class="text-slate-500">รหัส: ${escapeHtml(p.patient_id)} | อายุ: ${escapeHtml(p.age || "-")} ปี | ${escapeHtml(p.care_location || "-")}</p>
+            <p class="text-[11px] text-slate-400">โรคประจำตัว: ${escapeHtml(p.chronic_diseases || "-")} | แพ้ยา: ${escapeHtml(p.drug_allergies || "ไม่มี")}</p>
+          </div>
+          <button
+            type="button"
+            onclick='editPatientInForm(${JSON.stringify(p).replace(/'/g, "&#39;")})'
+            class="px-2.5 py-1.5 rounded-lg bg-sky-50 text-sky-700 font-medium text-[11px]"
+          >
+            แก้ไข
+          </button>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function editPatientInForm(p) {
+      document.getElementById("admPatId").value = p.patient_id;
+      document.getElementById("admPatName").value = p.full_name;
+      document.getElementById("admPatAge").value = p.age;
+      document.getElementById("admPatDisease").value = p.chronic_diseases;
+      document.getElementById("admPatAllergy").value = p.drug_allergies;
+      document.getElementById("admPatLocation").value = p.care_location;
+      document.getElementById("admPatStatus").value = p.patient_status || "ACTIVE";
+      document.getElementById("admPatSubmitBtn").textContent = "💾 อัปเดตข้อมูลคนไข้ (" + p.patient_id + ")";
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function resetAdminPatientForm() {
+      document.getElementById("admPatId").value = "";
+      document.getElementById("admPatName").value = "";
+      document.getElementById("admPatAge").value = "";
+      document.getElementById("admPatDisease").value = "";
+      document.getElementById("admPatAllergy").value = "";
+      document.getElementById("admPatLocation").value = "";
+      document.getElementById("admPatStatus").value = "ACTIVE";
+      document.getElementById("admPatSubmitBtn").textContent = "💾 บันทึกข้อมูลคนไข้";
+    }
+
+    async function handleAdminSavePatient(event) {
+      event.preventDefault();
+      try {
+        const res = await postToGas({
+          action: "adminSavePatient",
+          admin_line_user_id: lineProfile.userId,
+          patient_id: document.getElementById("admPatId").value.trim(),
+          full_name: document.getElementById("admPatName").value.trim(),
+          age: document.getElementById("admPatAge").value.trim(),
+          chronic_diseases: document.getElementById("admPatDisease").value.trim(),
+          drug_allergies: document.getElementById("admPatAllergy").value.trim(),
+          care_location: document.getElementById("admPatLocation").value.trim(),
+          patient_status: document.getElementById("admPatStatus").value
+        });
+
+        if (res.status === "success") {
+          showGlobalAlert("✅ " + res.message, "success");
+          showSaveSuccessModal("บันทึกเรียบร้อย", res.message || "บันทึกข้อมูลคนไข้เรียบร้อยแล้ว");
+          resetAdminPatientForm();
+          appState = res.data;
+          populateCaregiverView(appState);
+          populateAdminView(appState);
+        } else {
+          showGlobalAlert(res.message || "บันทึกข้อมูลคนไข้ไม่สำเร็จ", "error");
+        }
+      } catch (err) {
+        showGlobalAlert("เกิดข้อผิดพลาดในการบันทึกข้อมูลคนไข้", "error");
+      }
+    }
+
+    function renderAdminReportsSection(patients, reports) {
+      const sel = document.getElementById("admReportFilterPatient");
+      sel.innerHTML = '<option value="ALL">แสดงคนไข้ทั้งหมด (' + reports.length + ' รายการ)</option>';
+      patients.forEach(function (p) {
+        const opt = document.createElement("option");
+        opt.value = p.patient_id;
+        opt.textContent = `${p.full_name} (${p.patient_id})`;
+        sel.appendChild(opt);
+      });
+      renderAdminReports();
+    }
+
+    function renderAdminReports() {
+      const cfg = getFilterConfigByMode("admin");
+      renderTimelineCards(cfg.reports, "adminReportsTimeline");
+    }
+
+    /**
+     * ========================================================================
+     * 7.5 ฟังก์ชันสร้างและส่งออกรายงานเป็นไฟล์ PDF (เรียงตามรายวันของช่วงเวลาที่กำหนด)
+     * ========================================================================
+     */
+    async function handleExportPdf(mode) {
+      hideGlobalAlert();
+      const cfg = getFilterConfigByMode(mode);
+
+      if (!cfg.reports || cfg.reports.length === 0) {
+        showGlobalAlert("ไม่พบข้อมูลรายงานอาการในช่วงเวลาที่เลือกสำหรับส่งออก PDF", "error");
+        return;
+      }
+
+      // ค้นหาข้อมูลคนไข้ (กรณีเลือกเฉพาะรายบุคคล)
+      const patients = (appState && appState.patients) || [];
+      let selectedPatientObj = null;
+      if (cfg.patientId && cfg.patientId !== "ALL") {
+        selectedPatientObj = patients.find(function (p) {
+          return p.patient_id === cfg.patientId;
+        });
+      }
+
+      const patientTitle = selectedPatientObj
+        ? selectedPatientObj.full_name
+        : (cfg.patientId === "ALL" ? "คนไข้ทั้งหมด" : cfg.patientId);
+
+      const dateRangeTitle = (cfg.startDate || cfg.endDate)
+        ? `ตั้งแต่วันที่ ${cfg.startDate ? formatThaiShortDate(cfg.startDate) : "เริ่มต้น"} ถึงวันที่ ${cfg.endDate ? formatThaiShortDate(cfg.endDate) : "ปัจจุบัน"}`
+        : "ทุกช่วงเวลาทั้งหมด";
+
+      const built = buildDailyPdfReportHtml(cfg.reports, {
+        patientObj: selectedPatientObj,
+        patientTitle: patientTitle,
+        dateRangeTitle: dateRangeTitle,
+        startDate: cfg.startDate,
+        endDate: cfg.endDate
+      });
+
+      // เปิดหน้าต่างแสดงตัวอย่างรายงาน PDF ทันที
+      const modal = document.getElementById("pdfReportModal");
+      const previewContainer = document.getElementById("pdfPreviewContainer");
+      const statusText = document.getElementById("pdfModalStatusText");
+      const btnDownload = document.getElementById("btnDownloadPdfFile");
+      const btnDrive = document.getElementById("btnOpenDrivePdf");
+
+      previewContainer.innerHTML = built.innerBodyHtml;
+      statusText.textContent = "⏳ กำลังสร้างไฟล์ .PDF สำหรับดาวน์โหลด...";
+      btnDownload.classList.add("hidden");
+      btnDrive.classList.add("hidden");
+      modal.classList.remove("hidden");
+
+      const fileName = `รายงานอาการคนไข้_${patientTitle}${cfg.startDate ? "_" + cfg.startDate : ""}${cfg.endDate ? "_ถึง_" + cfg.endDate : ""}`;
+
+      try {
+        const res = await postToGas({
+          action: "generatePdfReport",
+          html_content: built.fullHtmlDoc,
+          file_name: fileName
+        });
+
+        if (res && res.status === "success" && res.pdfBase64) {
+          const dataUri = "data:application/pdf;base64," + res.pdfBase64;
+          btnDownload.href = dataUri;
+          btnDownload.download = res.fileName || (fileName + ".pdf");
+          btnDownload.classList.remove("hidden");
+
+          if (res.pdfUrl) {
+            btnDrive.href = res.pdfUrl;
+            btnDrive.classList.remove("hidden");
+          }
+
+          statusText.textContent = "✅ สร้างไฟล์ PDF เรียบร้อยแล้ว! กดปุ่มดาวน์โหลดด้านขวาบนได้เลย";
+
+          // สั่งดาวน์โหลดไฟล์ .PDF อัตโนมัติบนเบราว์เซอร์ที่รองรับ
+          const autoLink = document.createElement("a");
+          autoLink.href = dataUri;
+          autoLink.download = res.fileName || (fileName + ".pdf");
+          document.body.appendChild(autoLink);
+          autoLink.click();
+          document.body.removeChild(autoLink);
+        } else {
+          statusText.textContent = "พร้อมพิมพ์รายงาน PDF (กดปุ่ม 🖨️ พิมพ์ ด้านขวาบน)";
+        }
+      } catch (err) {
+        console.warn("PDF Generate Warning:", err);
+        statusText.textContent = "พร้อมพิมพ์รายงาน PDF (กดปุ่ม 🖨️ พิมพ์ ด้านขวาบน)";
+      }
+    }
+
+    function closePdfReportModal() {
+      document.getElementById("pdfReportModal").classList.add("hidden");
+    }
+
+    function printPdfPreviewContent() {
+      const contentHtml = document.getElementById("pdfPreviewContainer").innerHTML;
+      const printWin = window.open("", "_blank");
+      if (!printWin) {
+        window.print();
+        return;
+      }
+      printWin.document.open();
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html lang="th">
+        <head>
+          <meta charset="UTF-8" />
+          <title>รายงานอาการคนไข้ประจำวัน</title>
+          <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet" />
+          <style>
+            body { font-family: 'Sarabun', sans-serif; color: #1e293b; margin: 16px; }
+            @media print {
+              body { margin: 0; }
+              .day-group { page-break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          ${contentHtml}
+          <script>
+            window.onload = function() {
+              setTimeout(function() { window.print(); }, 400);
+            };
+          <\/script>
+        </body>
+        </html>
+      `);
+      printWin.document.close();
+    }
+
+    /**
+     * ออกแบบโครงสร้าง HTML สำหรับรายงาน PDF โดยจัดเรียงตามรายวัน (จากวันเริ่มต้น -> วันสิ้นสุด)
+     */
+    function buildDailyPdfReportHtml(reports, meta) {
+      // 1) เรียงลำดับจากวันเริ่มต้นไปวันสิ้นสุด (Chronological: เก่า -> ใหม่)
+      const chronological = (reports || []).slice().sort(function (a, b) {
+        const da = new Date(a.reported_at).getTime() || 0;
+        const db = new Date(b.reported_at).getTime() || 0;
+        return da - db;
+      });
+
+      // 2) จัดกลุ่มตามรายวัน (YYYY-MM-DD)
+      const dayGroups = [];
+      const dayMap = {};
+
+      chronological.forEach(function (r) {
+        const d = new Date(r.reported_at);
+        let dayKey = "ไม่ระบุวันที่";
+        let dayLabel = "ไม่ระบุวันที่";
+
+        if (!isNaN(d.getTime())) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          dayKey = `${y}-${m}-${day}`;
+          dayLabel = d.toLocaleDateString("th-TH", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric"
+          });
+        }
+
+        if (!dayMap[dayKey]) {
+          dayMap[dayKey] = {
+            dayKey: dayKey,
+            dayLabel: dayLabel,
+            items: []
+          };
+          dayGroups.push(dayMap[dayKey]);
+        }
+        dayMap[dayKey].items.push(r);
+      });
+
+      // ข้อมูลโปรไฟล์คนไข้ในส่วนหัวของ PDF (ถ้าเลือกคนไข้รายบุคคล)
+      const p = meta.patientObj;
+      const patientHeaderDetailHtml = p
+        ? `
+          <table style="width:100%; border-collapse:collapse; margin-top:8px; font-size:12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px;">
+            <tr>
+              <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0;"><b>ชื่อ-นามสกุลคนไข้:</b> ${escapeHtml(p.full_name)} (${escapeHtml(p.patient_id)})</td>
+              <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0;"><b>อายุ:</b> ${escapeHtml(p.age || "-")} ปี</td>
+              <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0;"><b>สถานที่ดูแล:</b> ${escapeHtml(p.care_location || "-")}</td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding:6px 10px;"><b>โรคประจำตัว:</b> ${escapeHtml(p.chronic_diseases || "-")}</td>
+              <td style="padding:6px 10px; color:#be123c;"><b>ประวัติแพ้ยา:</b> ${escapeHtml(p.drug_allergies || "ไม่มี")}</td>
+            </tr>
+          </table>
+        `
+        : `<p style="margin:6px 0 0 0; font-size:13px;"><b>คนไข้ที่แสดงในรายงาน:</b> ${escapeHtml(meta.patientTitle)}</p>`;
+
+      // สร้างตารางรายงานแยกตามรายวัน
+      let daysSectionHtml = "";
+      dayGroups.forEach(function (group, gIdx) {
+        let itemsHtml = "";
+
+        group.items.forEach(function (r, idx) {
+          const parsed = parseStructuredAssessment(r.symptoms_checklist || "");
+          const periodText = (r.report_period && r.report_period !== "-") ? r.report_period : (parsed["ช่วงเวลารายงานอาการ"] || "-");
+          const consciousnessText = (r.consciousness && r.consciousness !== "-") ? r.consciousness : (parsed["ระดับการรู้สึกตัว"] || "-");
+          const bpText = r.bp || "-";
+          const pulseText = r.pulse || "-";
+          const tempText = r.temperature || "-";
+          const respText = r.respiratory_rate || "-";
+          const o2Text = r.oxygen_sat || "-";
+          const bloodSugarText = (r.blood_sugar && r.blood_sugar !== "-") ? r.blood_sugar : (parsed["ระดับน้ำตาลปลายนิ้ว"] || "-");
+
+          let nutritionText = "-";
+          if (r.nutrition_combined && r.nutrition_combined !== "-") {
+            nutritionText = r.nutrition_combined;
+          } else if (r.nutrition_type && r.nutrition_type !== "-") {
+            nutritionText = r.nutrition_type + (r.nutrition_note && r.nutrition_note !== "-" ? " : " + r.nutrition_note : "");
+          } else if (parsed["การรับประทานอาหาร"]) {
+            nutritionText = parsed["การรับประทานอาหาร"];
+          }
+
+          const restText = (r.rest_info && r.rest_info !== "-") ? r.rest_info : (parsed["การพักผ่อน"] || "-");
+          const activityText = (r.activity_info && r.activity_info !== "-") ? r.activity_info : (parsed["การทำกิจกรรม"] || "-");
+          const fluidIn = r.fluid_intake || "-";
+          const fluidOut = r.fluid_output || "-";
+
+          let excretionText = "-";
+          if (r.excretion_combined && r.excretion_combined !== "-") {
+            excretionText = r.excretion_combined;
+          } else if (r.excretion_type && r.excretion_type !== "-") {
+            excretionText = r.excretion_type === "ขับถ่าย"
+              ? "ขับถ่าย" + (r.excretion_note && r.excretion_note !== "-" ? " : " + r.excretion_note : "")
+              : r.excretion_type;
+          } else if (parsed["การขับถ่าย"]) {
+            excretionText = parsed["การขับถ่าย"];
+          }
+
+          const level = r.triage_level || "ปกติ";
+          const levelBg = level === "ฉุกเฉิน" ? "#fee2e2" : (level === "เฝ้าระวัง" ? "#fef3c7" : "#d1fae5");
+          const levelColor = level === "ฉุกเฉิน" ? "#991b1b" : (level === "เฝ้าระวัง" ? "#92400e" : "#065f46");
+
+          const timeOnlyStr = formatThaiTimeOnly(r.reported_at);
+
+          itemsHtml += `
+            <div style="border:1px solid #cbd5e1; border-radius:8px; margin-bottom:10px; overflow:hidden; background:#ffffff;">
+              <div style="background:#f1f5f9; padding:7px 12px; border-bottom:1px solid #cbd5e1; display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+                <div>
+                  <b style="color:#0f172a; font-size:13px;">ช่วงเวลา: ${escapeHtml(periodText)}</b>
+                  <span style="color:#475569; margin-left:8px;">(เวลาบันทึก: ${escapeHtml(timeOnlyStr)} | คนไข้: ${escapeHtml(r.patient_name || r.patient_id)})</span>
+                </div>
+                <span style="background:${levelBg}; color:${levelColor}; padding:2px 8px; border-radius:12px; font-weight:bold; font-size:11px;">
+                  ระดับอาการ: ${escapeHtml(level)}
+                </span>
+              </div>
+
+              <table style="width:100%; border-collapse:collapse; font-size:11.5px;">
+                <tr>
+                  <td style="width:33%; padding:6px 10px; border-bottom:1px solid #e2e8f0; border-right:1px solid #e2e8f0;">
+                    <span style="color:#64748b;">1. ช่วงเวลารายงานอาการ:</span><br/>
+                    <b>${escapeHtml(periodText)}</b>
+                  </td>
+                  <td style="width:34%; padding:6px 10px; border-bottom:1px solid #e2e8f0; border-right:1px solid #e2e8f0;">
+                    <span style="color:#64748b;">2. ระดับการรู้สึกตัว:</span><br/>
+                    <b>${escapeHtml(consciousnessText)}</b>
+                  </td>
+                  <td style="width:33%; padding:6px 10px; border-bottom:1px solid #e2e8f0;">
+                    <span style="color:#64748b;">4. ระดับน้ำตาลปลายนิ้ว:</span><br/>
+                    <b>${escapeHtml(bloodSugarText)}</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="3" style="padding:6px 10px; border-bottom:1px solid #e2e8f0; background:#f8fafc;">
+                    <span style="color:#64748b;">3. สัญญาณชีพ:</span>
+                    <span style="margin-left:6px;"><b>ความดันโลหิต:</b> ${escapeHtml(bpText)}</span> |
+                    <span><b>ชีพจร:</b> ${escapeHtml(pulseText)}</span> |
+                    <span><b>อุณหภูมิ:</b> ${escapeHtml(tempText)}</span> |
+                    <span><b>อัตราการหายใจ:</b> ${escapeHtml(respText)}</span> |
+                    <span><b>ออกซิเจนปลายนิ้ว:</b> ${escapeHtml(o2Text)}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding:6px 10px; border-bottom:1px solid #e2e8f0; border-right:1px solid #e2e8f0;">
+                    <span style="color:#64748b;">5. การรับประทานอาหาร:</span><br/>
+                    <b>${escapeHtml(nutritionText)}</b>
+                  </td>
+                  <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0;">
+                    <span style="color:#64748b;">8. ปริมาณน้ำ:</span><br/>
+                    <b>น้ำเข้า: ${escapeHtml(fluidIn)} / น้ำออก: ${escapeHtml(fluidOut)}</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0; border-right:1px solid #e2e8f0;">
+                    <span style="color:#64748b;">6. การพักผ่อน:</span><br/>
+                    <b>${escapeHtml(restText)}</b>
+                  </td>
+                  <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0; border-right:1px solid #e2e8f0;">
+                    <span style="color:#64748b;">7. การทำกิจกรรม:</span><br/>
+                    <b>${escapeHtml(activityText)}</b>
+                  </td>
+                  <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0;">
+                    <span style="color:#64748b;">9. การขับถ่าย:</span><br/>
+                    <b>${escapeHtml(excretionText)}</b>
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="3" style="padding:6px 10px; background:#f0fdf4;">
+                    <span style="color:#065f46; font-weight:bold;">รายละเอียดอาการ / บันทึกการดูแลเพิ่มเติม:</span>
+                    <div style="margin-top:2px; white-space:pre-line;">${escapeHtml(r.care_notes || "-")}</div>
+                    <div style="margin-top:4px; font-size:10.5px; color:#64748b; text-align:right;">
+                      ผู้บันทึก: ${escapeHtml(r.reported_by_name || "-")} | รหัสรายงาน: ${escapeHtml(r.report_id || "-")}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </div>
+          `;
+        });
+
+        daysSectionHtml += `
+          <div class="day-group" style="margin-top:16px;">
+            <div style="background:#059669; color:#ffffff; padding:7px 12px; border-radius:8px; font-size:13px; font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between;">
+              <span>📅 ${escapeHtml(group.dayLabel)}</span>
+              <span style="font-size:11px; font-weight:normal;">จำนวน ${group.items.length} รายการ</span>
+            </div>
+            ${itemsHtml}
+          </div>
+        `;
+      });
+
+      const printedAt = formatThaiDate(new Date().toISOString());
+      const innerBodyHtml = `
+        <div style="font-family:'Sarabun','Prompt',sans-serif; color:#1e293b; line-height:1.45;">
+          <div style="border-bottom:2px solid #059669; padding-bottom:10px; margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+              <div>
+                <h1 style="margin:0; font-size:18px; color:#065f46;">C Wellness Care Tracker</h1>
+                <p style="margin:2px 0 0 0; font-size:13px; color:#475569; font-weight:bold;">รายงานสรุปอาการและการดูแลคนไข้ประจำวัน (เรียงตามรายวัน)</p>
+              </div>
+              <div style="text-align:right; font-size:11px; color:#64748b;">
+                <div><b>ช่วงเวลาที่ค้นหา:</b> ${escapeHtml(meta.dateRangeTitle)}</div>
+                <div><b>จำนวนรายงานทั้งหมด:</b> ${chronological.length} รายการ (${dayGroups.length} วัน)</div>
+                <div><b>วันที่ออกรายงาน:</b> ${escapeHtml(printedAt)}</div>
+              </div>
+            </div>
+            ${patientHeaderDetailHtml}
+          </div>
+
+          ${daysSectionHtml}
+        </div>
+      `;
+
+      const fullHtmlDoc = `
+        <!DOCTYPE html>
+        <html lang="th">
+        <head>
+          <meta charset="UTF-8" />
+          <style>
+            @page { size: A4 portrait; margin: 12mm; }
+            body { font-family: 'Sarabun', 'Tahoma', sans-serif; color: #1e293b; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          ${innerBodyHtml}
+        </body>
+        </html>
+      `;
+
+      return {
+        innerBodyHtml: innerBodyHtml,
+        fullHtmlDoc: fullHtmlDoc
+      };
+    }
+
+    function formatThaiShortDate(ymdStr) {
+      if (!ymdStr) return "-";
+      const parts = ymdStr.split("-");
+      if (parts.length !== 3) return ymdStr;
+      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      if (isNaN(d.getTime())) return ymdStr;
+      return d.toLocaleDateString("th-TH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+      });
+    }
+
+    function formatThaiTimeOnly(isoStr) {
+      if (!isoStr) return "-";
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return String(isoStr);
+      return d.toLocaleTimeString("th-TH", {
+        hour: "2-digit",
+        minute: "2-digit"
+      }) + " น.";
+    }
+
+    /**
+     * ========================================================================
+     * 8. ฟังก์ชันวาด Timeline Cards ของรายงานอาการ (ใช้ร่วมกันทุกบทบาท)
+     * ========================================================================
+     */
+    function renderTimelineCards(reports, containerId) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = "";
+
+      if (!reports || reports.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white rounded-2xl p-8 text-center border border-slate-100 space-y-3">
+            <p class="text-xs text-slate-500 font-medium">ยังไม่มีการบันทึกรายงานอาการประจำวัน</p>
+            <div>
+              <button
+                type="button"
+                onclick="handleBackWhenNoReport('${containerId}')"
+                class="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition"
+              >
+                <span>←</span>
+                <span>ย้อนกลับ</span>
+              </button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      reports.forEach(function (r) {
+        const level = r.triage_level || "ปกติ";
+        let badgeStyle = "bg-emerald-50 text-emerald-700 border-emerald-200";
+        let badgeIcon = "🟢";
+
+        if (level === "ฉุกเฉิน") {
+          badgeStyle = "bg-rose-50 text-rose-700 border-rose-200 animate-pulse";
+          badgeIcon = "🚨";
+        } else if (level === "เฝ้าระวัง") {
+          badgeStyle = "bg-amber-50 text-amber-700 border-amber-200";
+          badgeIcon = "⚠️";
+        }
+
+        // รองรับทั้งข้อมูลจากคอลัมน์แยกใหม่ และข้อมูลรูปแบบเดิม (ถ้ามี)
+        const parsedAssessment = parseStructuredAssessment(r.symptoms_checklist || "");
+        const periodText = (r.report_period && r.report_period !== "-") ? r.report_period : (parsedAssessment["ช่วงเวลารายงานอาการ"] || "-");
+        const consciousnessText = (r.consciousness && r.consciousness !== "-") ? r.consciousness : (parsedAssessment["ระดับการรู้สึกตัว"] || "-");
+        const bpText = r.bp || "-";
+        const pulseText = r.pulse || "-";
+        const tempText = r.temperature || "-";
+        const respText = r.respiratory_rate || "-";
+        const o2Text = r.oxygen_sat || "-";
+        const bloodSugarText = (r.blood_sugar && r.blood_sugar !== "-") ? r.blood_sugar : (parsedAssessment["ระดับน้ำตาลปลายนิ้ว"] || "-");
+
+        let nutritionText = "-";
+        if (r.nutrition_combined && r.nutrition_combined !== "-") {
+          nutritionText = r.nutrition_combined;
+        } else if (r.nutrition_type && r.nutrition_type !== "-") {
+          nutritionText = r.nutrition_type + (r.nutrition_note && r.nutrition_note !== "-" ? " : " + r.nutrition_note : "");
+        } else if (r.nutrition_note && r.nutrition_note !== "-") {
+          nutritionText = r.nutrition_note;
+        } else if (parsedAssessment["การรับประทานอาหาร"]) {
+          nutritionText = parsedAssessment["การรับประทานอาหาร"];
+        }
+
+        const restText = (r.rest_info && r.rest_info !== "-") ? r.rest_info : (parsedAssessment["การพักผ่อน"] || "-");
+        const activityText = (r.activity_info && r.activity_info !== "-") ? r.activity_info : (parsedAssessment["การทำกิจกรรม"] || "-");
+
+        let fluidText = "-";
+        if ((r.fluid_intake && r.fluid_intake !== "-") || (r.fluid_output && r.fluid_output !== "-")) {
+          fluidText = "น้ำเข้า: " + (r.fluid_intake || "-") + " | น้ำออก: " + (r.fluid_output || "-");
+        } else if (parsedAssessment["ปริมาณน้ำ"]) {
+          fluidText = parsedAssessment["ปริมาณน้ำ"];
+        }
+
+        let excretionText = "-";
+        if (r.excretion_combined && r.excretion_combined !== "-") {
+          excretionText = r.excretion_combined;
+        } else if (r.excretion_type && r.excretion_type !== "-") {
+          excretionText = r.excretion_type === "ขับถ่าย"
+            ? "ขับถ่าย" + (r.excretion_note && r.excretion_note !== "-" ? " : " + r.excretion_note : "")
+            : r.excretion_type;
+        } else if (parsedAssessment["การขับถ่าย"]) {
+          excretionText = parsedAssessment["การขับถ่าย"];
+        }
+
+        const isNight = periodText.indexOf("เย็น") !== -1 || periodText.indexOf("Night") !== -1;
+        const periodBadgeHtml = (periodText && periodText !== "-")
+          ? `<span class="inline-flex items-center space-x-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+              isNight ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-amber-50 text-amber-700 border-amber-200"
+            }">
+               <span>${isNight ? "🌙" : "☀️"}</span>
+               <span>${escapeHtml(periodText)}</span>
+             </span>`
+          : "";
+
+        const assessmentDetailsHtml = `
+          <div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-xs space-y-2">
+            <div class="grid grid-cols-1 gap-1.5">
+              <div class="flex justify-between border-b border-slate-200/60 pb-1">
+                <span class="text-slate-500 font-medium">1. ช่วงเวลารายงานอาการ:</span>
+                <span class="font-semibold text-slate-800">${escapeHtml(periodText)}</span>
+              </div>
+              <div class="flex justify-between border-b border-slate-200/60 pb-1">
+                <span class="text-slate-500 font-medium">2. ระดับการรู้สึกตัว:</span>
+                <span class="font-semibold text-slate-800 text-right">${escapeHtml(consciousnessText)}</span>
+              </div>
+              <div class="border-b border-slate-200/60 pb-1.5 space-y-1">
+                <span class="text-slate-500 font-medium block">3. สัญญาณชีพ:</span>
+                <div class="grid grid-cols-2 gap-1.5 bg-white p-2 rounded-lg border border-slate-200/80 text-[11px]">
+                  <div><span class="text-slate-400">ความดันโลหิต:</span> <b class="text-slate-800">${escapeHtml(bpText)}</b></div>
+                  <div><span class="text-slate-400">ชีพจร:</span> <b class="text-slate-800">${escapeHtml(pulseText)}</b></div>
+                  <div><span class="text-slate-400">อุณหภูมิ:</span> <b class="text-slate-800">${escapeHtml(tempText)}</b></div>
+                  <div><span class="text-slate-400">อัตราการหายใจ:</span> <b class="text-slate-800">${escapeHtml(respText)}</b></div>
+                  <div class="col-span-2"><span class="text-slate-400">ออกซิเจนปลายนิ้ว:</span> <b class="text-emerald-700">${escapeHtml(o2Text)}</b></div>
+                </div>
+              </div>
+              <div class="flex justify-between border-b border-slate-200/60 pb-1">
+                <span class="text-slate-500 font-medium">4. ระดับน้ำตาลปลายนิ้ว:</span>
+                <span class="font-semibold text-slate-800">${escapeHtml(bloodSugarText)}</span>
+              </div>
+              <div class="border-b border-slate-200/60 pb-1">
+                <span class="text-slate-500 font-medium">5. การรับประทานอาหาร:</span>
+                <span class="font-semibold text-slate-800 block mt-0.5">${escapeHtml(nutritionText)}</span>
+              </div>
+              <div class="border-b border-slate-200/60 pb-1">
+                <span class="text-slate-500 font-medium">6. การพักผ่อน:</span>
+                <span class="font-semibold text-slate-800 block mt-0.5">${escapeHtml(restText)}</span>
+              </div>
+              <div class="border-b border-slate-200/60 pb-1">
+                <span class="text-slate-500 font-medium">7. การทำกิจกรรม:</span>
+                <span class="font-semibold text-slate-800 block mt-0.5">${escapeHtml(activityText)}</span>
+              </div>
+              <div class="border-b border-slate-200/60 pb-1">
+                <span class="text-slate-500 font-medium">8. ปริมาณน้ำ:</span>
+                <span class="font-semibold text-sky-800 block mt-0.5">${escapeHtml(fluidText)}</span>
+              </div>
+              <div>
+                <span class="text-slate-500 font-medium">9. การขับถ่าย:</span>
+                <span class="font-semibold text-slate-800 block mt-0.5">${escapeHtml(excretionText)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+
+        // แสดงรูปภาพสูงสุด 3 ภาพ
+        const photoList = Array.isArray(r.photos) && r.photos.length > 0
+          ? r.photos
+          : [r.photo_url_1 || r.photo_url, r.photo_url_2, r.photo_url_3].filter(function (u) { return u && String(u).trim() !== ""; });
+
+        let photoHtml = "";
+        if (photoList.length === 1) {
+          photoHtml = `
+            <div class="pt-1">
+              <a href="${escapeHtml(photoList[0])}" target="_blank" rel="noopener">
+                <img src="${escapeHtml(photoList[0])}" alt="Symptom Photo 1" class="w-full max-h-60 object-cover rounded-xl border border-slate-200" />
+              </a>
+            </div>
+          `;
+        } else if (photoList.length > 1) {
+          const gridCols = photoList.length === 2 ? "grid-cols-2" : "grid-cols-3";
+          const imgs = photoList.map(function (url, idx) {
+            return `
+              <a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="block relative rounded-xl overflow-hidden border border-slate-200 aspect-square bg-slate-100">
+                <img src="${escapeHtml(url)}" alt="Symptom Photo ${idx + 1}" class="w-full h-full object-cover" />
+                <span class="absolute bottom-1 right-1 bg-slate-900/70 text-white text-[10px] px-1.5 py-0.5 rounded-md">ภาพที่ ${idx + 1}</span>
+              </a>
+            `;
+          }).join("");
+          photoHtml = `<div class="pt-1 grid ${gridCols} gap-2">${imgs}</div>`;
+        }
+
+        // ตรวจสอบสิทธิ์การแก้ไขรายงาน: Admin แก้ไขได้ทุกรายการ, Caregiver แก้ไขได้เฉพาะรายงานของตัวเอง
+        const currentUserRole = (appState && appState.user && appState.user.role) || "";
+        const canEditReport =
+          currentUserRole === "ADMIN" ||
+          (currentUserRole === "CAREGIVER" && r.reported_by_line_id === lineProfile.userId);
+
+        const editBtnHtml = canEditReport
+          ? `<button
+               type="button"
+               onclick="openEditSymptomReport('${escapeHtml(r.report_id)}')"
+               class="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-semibold text-[11px] transition flex items-center space-x-1"
+             >
+               <span>✏️</span>
+               <span>แก้ไข</span>
+             </button>`
+          : "";
+
+        // แสดงวันเวลาที่แก้ไขไว้ใต้ชื่อผู้บันทึก เฉพาะของ Admin เท่านั้น
+        const adminEditedTimeHtml =
+          (currentUserRole === "ADMIN" && r.updated_at && String(r.updated_at).trim() !== "")
+            ? `<div class="text-[11px] text-amber-600 font-medium mt-0.5">✏️ แก้ไขล่าสุด: ${escapeHtml(formatThaiDate(r.updated_at))}</div>`
+            : "";
+
+        const card = document.createElement("article");
+        card.className = "bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3";
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <span class="text-[11px] text-slate-400 block">🕒 ${escapeHtml(formatThaiDate(r.reported_at))}</span>
+              <h4 class="text-sm font-bold text-slate-800">${escapeHtml(r.patient_name || r.patient_id)}</h4>
+            </div>
+            <div class="flex flex-col items-end gap-1">
+              <span class="inline-flex items-center space-x-1 text-xs font-semibold px-2.5 py-1 rounded-full border ${badgeStyle}">
+                <span>${badgeIcon}</span>
+                <span>${escapeHtml(level)}</span>
+              </span>
+              ${periodBadgeHtml}
+            </div>
+          </div>
+
+          ${assessmentDetailsHtml}
+
+          <div class="bg-emerald-50/40 rounded-xl p-2.5 border border-emerald-100/80 text-xs">
+            <span class="font-semibold text-emerald-800 block mb-0.5">📝 รายละเอียดอาการ / บันทึกการดูแลเพิ่มเติม:</span>
+            <p class="text-slate-700 whitespace-pre-line leading-relaxed">${escapeHtml(r.care_notes || "-")}</p>
+          </div>
+
+          ${photoHtml}
+
+          <div class="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+            <div>
+              <span>👩‍⚕️ ผู้บันทึก: ${escapeHtml(r.reported_by_name || "-")}</span>
+              ${adminEditedTimeHtml}
+            </div>
+            <div class="flex items-center gap-2">
+              <span>รหัส: ${escapeHtml(r.report_id)}</span>
+              ${editBtnHtml}
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    /**
+     * แปลงข้อความหัวข้อการประเมิน 1-9 จาก symptoms_checklist ให้เป็น Object
+     */
+    function parseStructuredAssessment(rawText) {
+      const map = { _isStructured: false };
+      if (!rawText) return map;
+
+      const lines = String(rawText).split(/\r?\n/);
+      lines.forEach(function (line) {
+        const idx = line.indexOf(":");
+        if (idx !== -1) {
+          const key = line.substring(0, idx).trim();
+          const val = line.substring(idx + 1).trim();
+          map[key] = val;
+        }
+      });
+
+      if (
+        map["ช่วงเวลารายงานอาการ"] !== undefined ||
+        map["ระดับการรู้สึกตัว"] !== undefined ||
+        map["การรับประทานอาหาร"] !== undefined ||
+        map["การขับถ่าย"] !== undefined
+      ) {
+        map._isStructured = true;
+      }
+      return map;
+    }
+
+    /**
+     * ========================================================================
+     * 9. Helper Functions (google.script.run + Fetch Hybrid, Date, XSS Escape)
+     * ========================================================================
+     */
+    async function fetchContextFromGas(lineUserId) {
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return await new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+            .clientGetContext(lineUserId);
+        });
+      }
+
+      const url = `${GAS_WEB_APP_URL}?action=getUserContext&lineUserId=${encodeURIComponent(lineUserId)}`;
+      const res = await fetch(url, { method: "GET" });
+      return await res.json();
+    }
+
+    async function postToGas(payloadObj) {
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return await new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+            .clientPostAction(payloadObj);
+        });
+      }
+
+      // ใช้ Content-Type: text/plain;charset=utf-8 เพื่อหลีกเลี่ยงปัญหา CORS Preflight บน Google Apps Script
+      const response = await fetch(GAS_WEB_APP_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8"
+        },
+        body: JSON.stringify(payloadObj)
+      });
+      return await response.json();
+    }
+
+    function copyLineUserId() {
+      if (!lineProfile.userId) return;
+      navigator.clipboard.writeText(lineProfile.userId);
+      showGlobalAlert("คัดลอก LINE User ID (" + lineProfile.userId + ") แล้ว", "success");
+    }
+
+    function showSaveSuccessModal(title, message) {
+      document.getElementById("saveModalTitle").textContent = title || "บันทึกเรียบร้อย";
+      document.getElementById("saveModalMessage").textContent = message || "ระบบได้บันทึกข้อมูลของคุณลงฐานข้อมูลเรียบร้อยแล้ว";
+      document.getElementById("saveSuccessModal").classList.remove("hidden");
+    }
+
+    function closeSaveSuccessModal() {
+      document.getElementById("saveSuccessModal").classList.add("hidden");
+    }
+
+    function handleBackWhenNoReport(containerId) {
+      hideGlobalAlert();
+      if (containerId === "cgHistoryTimeline") {
+        // ย้อนกลับไปหน้ากรอกรายงานอาการประจำวัน (หรือกลับหน้าหลักของ Admin)
+        if (appState && appState.user && appState.user.role === "ADMIN") {
+          showOnlyView("viewAdmin");
+          switchAdminTab("users");
+        } else {
+          switchCaregiverTab("form");
+        }
+      } else if (containerId === "adminReportsTimeline") {
+        // กรณีกรองเฉพาะคนไข้แล้วยังไม่มีรายงาน ให้รีเซ็ตตัวกรองหรือกลับไปแท็บคนไข้
+        const filterEl = document.getElementById("admReportFilterPatient");
+        if (filterEl && filterEl.value !== "ALL") {
+          filterEl.value = "ALL";
+          renderAdminReports();
+        } else {
+          switchAdminTab("patients");
+        }
+      } else if (containerId === "relativeTimelineContainer") {
+        // กรณีญาติดูแลหลายคน ให้สลับกลับไปคนไข้คนแรก หรือปิดหน้าต่าง LIFF หากอยู่ในแอป LINE
+        const patients = (appState && appState.patients) || [];
+        if (patients.length > 1 && selectedRelativePatientId !== patients[0].patient_id) {
+          selectedRelativePatientId = patients[0].patient_id;
+          populateRelativeView(appState);
+        } else if (typeof liff !== "undefined" && liff.isInClient()) {
+          liff.closeWindow();
+        } else {
+          refreshUserContext();
+        }
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function showGlobalAlert(msg, type) {
+      const el = document.getElementById("globalAlert");
+      el.classList.remove("hidden");
+      if (type === "success") {
+        el.className = "rounded-2xl p-3.5 text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-sm";
+      } else {
+        el.className = "rounded-2xl p-3.5 text-xs font-medium bg-rose-50 text-rose-800 border border-rose-200 shadow-sm";
+      }
+      el.textContent = msg;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function hideGlobalAlert() {
+      document.getElementById("globalAlert").classList.add("hidden");
+    }
+
+    function formatThaiDate(isoStr) {
+      if (!isoStr) return "-";
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return String(isoStr);
+      return d.toLocaleString("th-TH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      }) + " น.";
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
